@@ -152,3 +152,40 @@ async def test_static_and_traversal(client):
     assert r.status == 200 and "cabinet" in await r.text()
     r = await client.get("/../app.py")
     assert r.status == 404
+
+
+async def test_remnawave_3x_fallbacks(aiohttp_client):
+    """3.x has no by-telegram-id route and uses numeric user ids."""
+    from aiohttp import ClientSession, web as aweb
+
+    seen = {}
+
+    async def list_users(request):
+        start = int(request.query["start"])
+        users = [{"id": i, "telegramId": str(1000 + i), "status": "ACTIVE", "shortUuid": f"s{i}"}
+                 for i in range(1, 4)]
+        return aweb.json_response({"response": {"users": users[start:], "total": len(users)}})
+
+    async def devices(request):
+        return aweb.json_response({"response": {"total": 1, "devices": [{"hwid": "hw-1", "platform": "iOS"}]}})
+
+    async def delete(request):
+        seen["delete"] = await request.json()
+        return aweb.json_response({"response": {}})
+
+    panel = aweb.Application()
+    panel.router.add_get("/api/users", list_users)
+    panel.router.add_get("/api/hwid/devices/{key}", devices)
+    panel.router.add_post("/api/hwid/devices/delete", delete)
+    srv = await aiohttp_client(panel)
+
+    async with ClientSession() as session:
+        rw = cabinet.Remnawave(cfg(rw_api_base=str(srv.make_url("/api"))), session)
+        users = await rw.users_by_telegram_id(1002)
+        assert [u["shortUuid"] for u in users] == ["s2"]
+        key = cabinet.user_key(users[0])
+        assert key == 2
+        assert (await rw.hwid_devices(key))[0]["hwid"] == "hw-1"
+        await rw.delete_hwid_device(key, "hw-1")
+        assert seen["delete"] == {"userId": 2, "hwid": "hw-1"}
+        assert await rw.users_by_telegram_id(9999) == []

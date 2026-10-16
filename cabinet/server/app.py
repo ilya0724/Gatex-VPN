@@ -107,9 +107,16 @@ def validate_init_data(init_data: str, bot_token: str,
 # ---------------------------------------------------------------- Remnawave
 
 class Remnawave:
+    """Panel API client. Handles 2.x (users/by-telegram-id, uuid keys) and
+    3.x (no by-telegram-id route, numeric user ids)."""
+
+    LIST_PAGE = 500
+    LIST_TTL = 60
+
     def __init__(self, cfg: Config, session: ClientSession):
         self.cfg = cfg
         self.session = session
+        self._all_users: tuple[float, list[dict]] | None = None
 
     def _headers(self) -> dict:
         h = {
@@ -122,34 +129,72 @@ class Remnawave:
             h["X-Forwarded-Proto"] = "https"
         return h
 
+    @staticmethod
+    def _unwrap(body):
+        return body.get("response", body) if isinstance(body, dict) else body
+
     async def users_by_telegram_id(self, tg_id: int) -> list[dict]:
         url = f"{self.cfg.rw_api_base}/users/by-telegram-id/{int(tg_id)}"
         async with self.session.get(url, headers=self._headers()) as r:
+            # 404 is either "no such user" (2.x) or "no such route" (3.x);
+            # the full list answers both.
             if r.status == 404:
-                return []
+                return [u for u in await self.all_users()
+                        if str(u.get("telegramId") or "") == str(int(tg_id))]
             r.raise_for_status()
-            body = await r.json()
-        resp = body.get("response", body) if isinstance(body, dict) else body
+            resp = self._unwrap(await r.json())
         if isinstance(resp, dict):
             resp = [resp]
         return [u for u in resp or [] if isinstance(u, dict)]
 
-    async def hwid_devices(self, user_uuid: str) -> list[dict]:
-        url = f"{self.cfg.rw_api_base}/hwid/devices/{user_uuid}"
+    async def all_users(self) -> list[dict]:
+        if self._all_users and self._all_users[0] > time.time():
+            return self._all_users[1]
+        users: list[dict] = []
+        start = 0
+        while True:
+            url = f"{self.cfg.rw_api_base}/users"
+            params = {"start": start, "size": self.LIST_PAGE}
+            async with self.session.get(url, headers=self._headers(), params=params) as r:
+                r.raise_for_status()
+                resp = self._unwrap(await r.json())
+            page = resp.get("users", []) if isinstance(resp, dict) else resp or []
+            users.extend(u for u in page if isinstance(u, dict))
+            total = resp.get("total") if isinstance(resp, dict) else None
+            start += self.LIST_PAGE
+            if len(page) < self.LIST_PAGE or (total is not None and start >= int(total)):
+                break
+        self._all_users = (time.time() + self.LIST_TTL, users)
+        return users
+
+    async def hwid_devices(self, user_key) -> list[dict]:
+        url = f"{self.cfg.rw_api_base}/hwid/devices/{user_key}"
         async with self.session.get(url, headers=self._headers()) as r:
             if r.status == 404:
                 return []
             r.raise_for_status()
-            body = await r.json()
-        resp = body.get("response", body) if isinstance(body, dict) else body
+            resp = self._unwrap(await r.json())
         devices = resp.get("devices", []) if isinstance(resp, dict) else resp
         return [d for d in devices or [] if isinstance(d, dict) and d.get("hwid")]
 
-    async def delete_hwid_device(self, user_uuid: str, hwid: str) -> None:
+    async def delete_hwid_device(self, user_key, hwid: str) -> None:
         url = f"{self.cfg.rw_api_base}/hwid/devices/delete"
-        async with self.session.post(url, headers=self._headers(),
-                                     json={"userUuid": user_uuid, "hwid": hwid}) as r:
+        body = {"userId": user_key} if isinstance(user_key, int) else {"userUuid": user_key}
+        body["hwid"] = hwid
+        async with self.session.post(url, headers=self._headers(), json=body) as r:
             r.raise_for_status()
+
+
+def user_key(user: dict | None):
+    """Key for HWID calls: uuid on 2.x, numeric id on 3.x. Never sent to the page."""
+    if not user:
+        return None
+    if user.get("uuid"):
+        return user["uuid"]
+    uid = user.get("id")
+    if isinstance(uid, int) or (isinstance(uid, str) and uid.isdigit()):
+        return int(uid)
+    return uid or None
 
 
 def _ts(value) -> float:
@@ -257,7 +302,7 @@ async def _auth(request: web.Request) -> tuple[dict | None, dict]:
 async def _load(request: web.Request, tg_id: int, fresh: bool = False) -> dict:
     """Subscription and devices for one Telegram user, cached briefly.
 
-    The panel user's UUID is kept server-side only: it is the VPN credential.
+    The panel user's key (UUID on 2.x) is kept server-side only: it is the VPN credential.
     """
     cache: dict = request.app["cache"]
     hit = cache.get(tg_id)
@@ -266,13 +311,14 @@ async def _load(request: web.Request, tg_id: int, fresh: bool = False) -> dict:
     rw: Remnawave = request.app["rw"]
     user = pick_user(await rw.users_by_telegram_id(tg_id))
     devices = None
-    if user and user.get("uuid"):
+    key = user_key(user)
+    if key is not None:
         try:
-            devices = await rw.hwid_devices(user["uuid"])
+            devices = await rw.hwid_devices(key)
         except Exception:
             log.exception("device lookup failed for %s", tg_id)
     entry = {
-        "uuid": (user or {}).get("uuid"),
+        "key": key,
         "raw_devices": devices,
         "subscription": normalize_subscription(user, request.app["cfg"]),
         "devices": normalize_devices(devices) if devices is not None else None,
@@ -322,9 +368,9 @@ async def handle_device_delete(request: web.Request) -> web.Response:
         entry = await _load(request, tg_id, fresh=True)
         match = next((d for d in entry["raw_devices"] or []
                       if device_id(str(d["hwid"])) == target), None)
-        if not entry["uuid"] or not match:
+        if entry["key"] is None or not match:
             return json_response({"error": "not_found"}, 404)
-        await rw.delete_hwid_device(entry["uuid"], str(match["hwid"]))
+        await rw.delete_hwid_device(entry["key"], str(match["hwid"]))
         log.info("tg %s removed device %s", tg_id, target)
         entry = await _load(request, tg_id, fresh=True)
     except Exception:
