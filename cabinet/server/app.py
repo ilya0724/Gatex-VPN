@@ -1,8 +1,10 @@
 """GateX personal cabinet: Telegram Mini App backend.
 
-Serves the static cabinet from ../web and one JSON endpoint, POST /api/me,
-which checks Telegram initData and returns the user's subscription from the
-Remnawave panel API. Nothing here writes to the panel.
+Serves the static cabinet from ../web and two JSON endpoints, both checked
+with Telegram initData:
+  POST /api/me              subscription and devices from the Remnawave API
+  POST /api/devices/delete  unlinks one of the user's own HWID devices
+That unlink is the only write to the panel.
 """
 
 from __future__ import annotations
@@ -132,6 +134,23 @@ class Remnawave:
             resp = [resp]
         return [u for u in resp or [] if isinstance(u, dict)]
 
+    async def hwid_devices(self, user_uuid: str) -> list[dict]:
+        url = f"{self.cfg.rw_api_base}/hwid/devices/{user_uuid}"
+        async with self.session.get(url, headers=self._headers()) as r:
+            if r.status == 404:
+                return []
+            r.raise_for_status()
+            body = await r.json()
+        resp = body.get("response", body) if isinstance(body, dict) else body
+        devices = resp.get("devices", []) if isinstance(resp, dict) else resp
+        return [d for d in devices or [] if isinstance(d, dict) and d.get("hwid")]
+
+    async def delete_hwid_device(self, user_uuid: str, hwid: str) -> None:
+        url = f"{self.cfg.rw_api_base}/hwid/devices/delete"
+        async with self.session.post(url, headers=self._headers(),
+                                     json={"userUuid": user_uuid, "hwid": hwid}) as r:
+            r.raise_for_status()
+
 
 def _ts(value) -> float:
     if not value:
@@ -189,6 +208,25 @@ def normalize_subscription(user: dict | None, cfg: Config) -> dict:
     }
 
 
+def device_id(hwid: str) -> str:
+    """Opaque id for the page; the raw HWID never leaves the server."""
+    return hashlib.sha256(f"gatex-device:{hwid}".encode()).hexdigest()[:16]
+
+
+def normalize_devices(devices: list[dict]) -> list[dict]:
+    out = [{
+        "id": device_id(str(d["hwid"])),
+        "platform": d.get("platform") or "",
+        "os_version": d.get("osVersion") or "",
+        "model": d.get("deviceModel") or "",
+        "app": d.get("userAgent") or "",
+        "added_at": d.get("createdAt"),
+        "seen_at": d.get("updatedAt") or d.get("createdAt"),
+    } for d in devices]
+    out.sort(key=lambda d: _ts(d["seen_at"]), reverse=True)
+    return out
+
+
 def public_links(cfg: Config) -> dict:
     return {
         "bot": f"https://t.me/{cfg.bot_username}",
@@ -205,43 +243,94 @@ def json_response(data: dict, status: int = 200) -> web.Response:
     return web.json_response(data, status=status, headers={"Cache-Control": "no-store"})
 
 
-async def handle_me(request: web.Request) -> web.Response:
+async def _auth(request: web.Request) -> tuple[dict | None, dict]:
     cfg: Config = request.app["cfg"]
     try:
         body = await request.json()
     except (json.JSONDecodeError, UnicodeDecodeError):
-        return json_response({"error": "bad_request"}, 400)
-    init = validate_init_data(str(body.get("initData", "")), cfg.bot_token)
-    if not init:
-        return json_response({"error": "unauthorized"}, 401)
+        return None, {}
+    if not isinstance(body, dict):
+        return None, {}
+    return validate_init_data(str(body.get("initData", "")), cfg.bot_token), body
 
-    tg = init["user"]
-    tg_id = int(tg["id"])
+
+async def _load(request: web.Request, tg_id: int, fresh: bool = False) -> dict:
+    """Subscription and devices for one Telegram user, cached briefly.
+
+    The panel user's UUID is kept server-side only: it is the VPN credential.
+    """
     cache: dict = request.app["cache"]
     hit = cache.get(tg_id)
-    if hit and hit[0] > time.time():
-        sub = hit[1]
-    else:
+    if hit and hit[0] > time.time() and not fresh:
+        return hit[1]
+    rw: Remnawave = request.app["rw"]
+    user = pick_user(await rw.users_by_telegram_id(tg_id))
+    devices = None
+    if user and user.get("uuid"):
         try:
-            users = await request.app["rw"].users_by_telegram_id(tg_id)
+            devices = await rw.hwid_devices(user["uuid"])
         except Exception:
-            log.exception("panel lookup failed for %s", tg_id)
-            return json_response({"error": "panel_unavailable"}, 502)
-        sub = normalize_subscription(pick_user(users), cfg)
-        cache[tg_id] = (time.time() + CACHE_TTL, sub)
+            log.exception("device lookup failed for %s", tg_id)
+    entry = {
+        "uuid": (user or {}).get("uuid"),
+        "raw_devices": devices,
+        "subscription": normalize_subscription(user, request.app["cfg"]),
+        "devices": normalize_devices(devices) if devices is not None else None,
+    }
+    cache[tg_id] = (time.time() + CACHE_TTL, entry)
+    return entry
 
+
+def _profile(tg: dict) -> dict:
+    return {
+        "id": int(tg["id"]),
+        "first_name": tg.get("first_name", ""),
+        "last_name": tg.get("last_name", ""),
+        "username": tg.get("username", ""),
+        "photo_url": tg.get("photo_url", ""),
+    }
+
+
+async def handle_me(request: web.Request) -> web.Response:
+    cfg: Config = request.app["cfg"]
+    init, _ = await _auth(request)
+    if not init:
+        return json_response({"error": "unauthorized"}, 401)
+    tg_id = int(init["user"]["id"])
+    try:
+        entry = await _load(request, tg_id)
+    except Exception:
+        log.exception("panel lookup failed for %s", tg_id)
+        return json_response({"error": "panel_unavailable"}, 502)
     return json_response({
-        "user": {
-            "id": tg_id,
-            "first_name": tg.get("first_name", ""),
-            "last_name": tg.get("last_name", ""),
-            "username": tg.get("username", ""),
-            "photo_url": tg.get("photo_url", ""),
-        },
-        "subscription": sub,
+        "user": _profile(init["user"]),
+        "subscription": entry["subscription"],
+        "devices": entry["devices"],
         "links": public_links(cfg),
         "price_from": cfg.price_from or None,
     })
+
+
+async def handle_device_delete(request: web.Request) -> web.Response:
+    init, body = await _auth(request)
+    if not init:
+        return json_response({"error": "unauthorized"}, 401)
+    tg_id = int(init["user"]["id"])
+    target = str(body.get("id", ""))
+    rw: Remnawave = request.app["rw"]
+    try:
+        entry = await _load(request, tg_id, fresh=True)
+        match = next((d for d in entry["raw_devices"] or []
+                      if device_id(str(d["hwid"])) == target), None)
+        if not entry["uuid"] or not match:
+            return json_response({"error": "not_found"}, 404)
+        await rw.delete_hwid_device(entry["uuid"], str(match["hwid"]))
+        log.info("tg %s removed device %s", tg_id, target)
+        entry = await _load(request, tg_id, fresh=True)
+    except Exception:
+        log.exception("device delete failed for %s", tg_id)
+        return json_response({"error": "panel_unavailable"}, 502)
+    return json_response({"devices": entry["devices"]})
 
 
 async def handle_health(request: web.Request) -> web.Response:
@@ -279,6 +368,7 @@ def create_app(cfg: Config) -> web.Application:
     app.on_startup.append(_on_startup)
     app.on_cleanup.append(_on_cleanup)
     app.router.add_post("/api/me", handle_me)
+    app.router.add_post("/api/devices/delete", handle_device_delete)
     app.router.add_get("/api/health", handle_health)
     app.router.add_get("/{path:.*}", handle_static)
     return app

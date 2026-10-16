@@ -165,12 +165,17 @@
 
   // ------------------------------------------------------------ demo data
   const DEMO_SCENARIOS = {
-    fresh: { label: 'Новый пользователь, пробный период', days: 3, trial: true, used: 0, connected: false, onboard: true },
-    active: { label: 'Активная подписка', days: 23, used: 18.6 * 1073741824, connected: true },
-    expiring: { label: 'Заканчивается завтра', days: 1, used: 41.2 * 1073741824, limit: 50 * 1073741824, connected: true },
-    expired: { label: 'Подписка закончилась', days: -4, used: 7.3 * 1073741824, connected: true, status: 'expired' },
+    fresh: { label: 'Новый пользователь, пробный период', days: 3, trial: true, used: 0, connected: false, onboard: true, devices: 0 },
+    active: { label: 'Активная подписка', days: 23, used: 18.6 * 1073741824, connected: true, devices: 2 },
+    expiring: { label: 'Заканчивается завтра, все места заняты', days: 1, used: 41.2 * 1073741824, limit: 50 * 1073741824, connected: true, devices: 3 },
+    expired: { label: 'Подписка закончилась', days: -4, used: 7.3 * 1073741824, connected: true, status: 'expired', devices: 1 },
     none: { label: 'Нет подписки', status: 'none' }
   };
+  const DEMO_DEVICES = [
+    { id: 'd1', platform: 'iOS', os_version: '18.1', model: 'iPhone15,2', app: 'Happ/3.6.2', seenMin: 12, addedDays: 20 },
+    { id: 'd2', platform: 'Windows', os_version: '11', model: 'DESKTOP-K7Q2', app: 'Happ/1.9.0', seenMin: 3 * 1440, addedDays: 14 },
+    { id: 'd3', platform: 'Android', os_version: '14', model: 'Redmi Note 12', app: 'Happ/3.5.0', seenMin: 26 * 1440, addedDays: 40 }
+  ];
   function demoData(key) {
     const s = DEMO_SCENARIOS[key];
     const sub = s.status === 'none' ? { status: 'none' } : {
@@ -188,6 +193,10 @@
     return {
       user: { id: 700123456, first_name: 'Иван', last_name: '', username: 'ivan_demo', photo_url: '' },
       subscription: sub,
+      devices: s.status === 'none' ? [] : DEMO_DEVICES.slice(0, s.devices || 0).map((d) => Object.assign({}, d, {
+        seen_at: new Date(Date.now() - d.seenMin * 60000).toISOString(),
+        added_at: new Date(Date.now() - d.addedDays * DAY).toISOString()
+      })),
       links: { bot: 'https://t.me/gatexvpn_bot', buy: 'https://t.me/gatexvpn_bot', support: 'https://t.me/gatexvpn_bot', channel: 'https://t.me/gaatex_vpn', referral: 'https://t.me/gatexvpn_bot' },
       price_from: null
     };
@@ -203,6 +212,8 @@
     error: null,
     tab: 'home',
     platform: 'android',
+    confirmDevice: null,
+    busy: false,
     sheet: null // {kind:'welcome'} | {kind:'wizard', platform, remote, step} | {kind:'devices', remote}
   };
   const root = () => $('#app');
@@ -340,8 +351,8 @@
         ? '<div class="stat wide"><span class="k">Трафик за период</span><span class="v">' + fmtBytes(s.used_bytes) + ' из ' + fmtBytes(s.limit_bytes) + '</span><div class="bar"><i style="width:' + Math.min(100, Math.round((s.used_bytes / s.limit_bytes) * 100)) + '%"></i></div></div>'
         : '<div class="stat"><span class="k">Трафик</span><span class="v">без лимита</span></div>';
       html += '<div class="stats">' + traffic +
-        (s.device_limit ? '<div class="stat"><span class="k">Устройства</span><span class="v">до ' + esc(s.device_limit) + '</span></div>' : '') +
-        '<div class="stat' + (s.limit_bytes > 0 || !s.device_limit ? '' : ' wide') + '"><span class="k">Последнее подключение</span><span class="v">' + esc(online || 'ещё не было') + '</span></div>' +
+        devicesStat(s) +
+        '<div class="stat' + (s.limit_bytes > 0 ? '' : ' wide') + '"><span class="k">Последнее подключение</span><span class="v">' + esc(online || 'ещё не было') + '</span></div>' +
         '</div>';
     }
 
@@ -358,6 +369,78 @@
       html += '<a class="btn ' + (v.active && v.tone === 'ok' ? 'ghost' : 'primary') + ' split" href="' + esc(v.links.buy) + '" data-link>' + ic('card') + '<span>' + buyLabel + '</span>' + price + '</a>';
       html += '<button class="btn ' + (v.active && v.tone === 'ok' ? 'primary' : 'invert') + ' split" data-act="tab" data-tab="setup">' + ic('plug') + '<span>Установка и настройка</span><span class="spacer"></span>' + ic(PLATFORMS[state.platform].icon, 'sm') + '</button>';
     }
+    return html;
+  }
+
+  function devicesStat(s) {
+    const list = state.data && state.data.devices;
+    const n = Array.isArray(list) ? list.length : null;
+    const full = n !== null && s.device_limit && n >= s.device_limit;
+    const value = n === null ? (s.device_limit ? 'до ' + s.device_limit : 'список') : n + (s.device_limit ? ' из ' + s.device_limit : '');
+    return '<button class="stat tappable" data-act="my-devices"><span class="k">Устройства</span><span class="v">' + esc(value) +
+      (full ? ' <span class="pill warn" style="vertical-align:2px">все места заняты</span>' : '') + '</span></button>';
+  }
+
+  // Panel platform strings vary by client ("iOS", "android", "Windows_NT"...).
+  function deviceKind(d) {
+    const p = (d.platform + ' ' + d.model + ' ' + d.app).toLowerCase();
+    if (/tv|aft|bravia|tizen|webos/.test(p)) return { icon: 'tv', name: 'Телевизор' };
+    if (/ios|iphone|ipad/.test(p)) return { icon: 'phone', name: /ipad/.test(p) ? 'iPad' : 'iPhone' };
+    if (/android/.test(p)) return { icon: 'phone', name: 'Android' };
+    if (/mac|darwin/.test(p)) return { icon: 'laptop', name: 'Mac' };
+    if (/win/.test(p)) return { icon: 'monitor', name: 'Windows' };
+    if (/linux/.test(p)) return { icon: 'terminal', name: 'Linux' };
+    return { icon: 'phone', name: d.platform || 'Устройство' };
+  }
+
+  const IPHONES = {
+    '13,1': '12 mini', '13,2': '12', '13,3': '12 Pro', '13,4': '12 Pro Max',
+    '14,4': '13 mini', '14,5': '13', '14,2': '13 Pro', '14,3': '13 Pro Max', '14,6': 'SE',
+    '14,7': '14', '14,8': '14 Plus', '15,2': '14 Pro', '15,3': '14 Pro Max',
+    '15,4': '15', '15,5': '15 Plus', '16,1': '15 Pro', '16,2': '15 Pro Max',
+    '17,3': '16', '17,4': '16 Plus', '17,1': '16 Pro', '17,2': '16 Pro Max', '17,5': '16e'
+  };
+  // Clients report raw ids like "iPhone15,2" or a PC hostname; show something a person recognises.
+  function deviceTitle(d, k) {
+    const m = (d.model || '').trim();
+    const ip = /^iPhone(\d+,\d+)$/.exec(m);
+    if (ip) return 'iPhone' + (IPHONES[ip[1]] ? ' ' + IPHONES[ip[1]] : '');
+    if (!m || /^(desktop|laptop|pc)-/i.test(m) || /^(iPad|Mac)\d/.test(m)) return k.name;
+    return m;
+  }
+
+  function devicesBlock() {
+    const s = vm().s;
+    if (s.status === 'none') return '';
+    const list = state.data.devices;
+    const limit = s.device_limit;
+    let html = '<h2 class="h-section" id="my-devices">Мои устройства' + (Array.isArray(list) ? ' · ' + list.length + (limit ? ' из ' + limit : '') : '') + '</h2>';
+    if (!Array.isArray(list)) {
+      return html + '<div class="hint">' + ic('info') + '<span>Список устройств сейчас не загрузился. Откройте кабинет чуть позже.</span></div>';
+    }
+    html += '<div class="list">';
+    if (!list.length) {
+      html += '<div class="row" style="cursor:default"><span class="ico">' + ic('phone') + '</span><span class="txt"><b>Пока пусто</b><span style="white-space:normal">Устройство появится здесь после первого подключения в Happ</span></span></div>';
+    }
+    list.forEach((d) => {
+      const k = deviceKind(d);
+      const title = deviceTitle(d, k);
+      const os = d.os_version
+        ? ({ iPhone: 'iOS', iPad: 'iPadOS', Mac: 'macOS' }[k.name] || k.name) + ' ' + d.os_version
+        : (k.name !== title ? k.name : '');
+      const meta = [os, (d.app || '').split('/')[0]].filter(Boolean).join(' · ');
+      const seen = d.seen_at ? fmtAgo(d.seen_at) : null;
+      const confirming = state.confirmDevice === d.id;
+      html += '<div class="device-row' + (confirming ? ' confirming' : '') + '">' +
+        '<span class="ico">' + ic(k.icon) + '</span>' +
+        '<span class="txt"><b>' + esc(title) + '</b><span>' + esc(meta) + '</span>' + (seen ? '<span>Активность: ' + esc(seen) + '</span>' : '') + '</span>' +
+        (confirming
+          ? '<span class="confirm"><button class="btn small danger" data-act="device-delete" data-id="' + esc(d.id) + '"' + (state.busy ? ' disabled' : '') + '>' + (state.busy ? 'Отвязываем…' : 'Отвязать') + '</button><button class="btn small ghost" data-act="device-cancel">Нет</button></span>'
+          : '<button class="iconbtn" aria-label="Отвязать ' + esc(title) + '" data-act="device-ask" data-id="' + esc(d.id) + '">' + ic('close', 'sm') + '</button>') +
+        '</div>';
+    });
+    html += '<button class="row" data-act="devices" data-remote="1">' + rowInner('qr', 'Подключить ещё устройство', limit && list.length >= limit ? 'Сначала отвяжите одно из старых' : 'Инструкция и QR-код') + '</button></div>';
+    html += '<p class="muted" style="margin:-4px 4px 0;font-size:13px">Отвяжите устройство, которым больше не пользуетесь: место освободится для нового. На отвязанном устройстве VPN перестанет работать, пока его не подключат снова.</p>';
     return html;
   }
 
@@ -391,6 +474,7 @@
     html += '<div class="card"><div class="who"><div class="avatar">' + (u.photo_url ? '<img src="' + esc(u.photo_url) + '" alt="">' : esc(initials)) + '</div>' +
       '<div class="txt"><b>' + esc(name) + '</b>' + (u.username ? '<span class="muted">@' + esc(u.username) + '</span><br>' : '') +
       '<button class="idchip" data-act="copy" data-text="' + esc(u.id) + '" data-msg="ID скопирован">ID ' + esc(u.id) + ' ' + ic('copy', 'sm') + '</button></div></div></div>';
+    html += devicesBlock();
 
     if (s.sub_url) {
       html += '<h2 class="h-section">Ваша подписка</h2><div class="card">' +
@@ -670,6 +754,17 @@
         haptic('medium'); openInHapp(vm().s.sub_url); break;
       case 'copy':
         copy(t.dataset.text, t.dataset.msg); break;
+      case 'my-devices':
+        haptic('light');
+        state.tab = 'profile'; state.confirmDevice = null; render();
+        { const h = $('#my-devices'); if (h) window.scrollTo(0, h.getBoundingClientRect().top + window.scrollY - 56); }
+        break;
+      case 'device-ask':
+        haptic('light'); state.confirmDevice = t.dataset.id; render(); break;
+      case 'device-cancel':
+        state.confirmDevice = null; render(); break;
+      case 'device-delete':
+        deleteDevice(t.dataset.id); break;
       case 'retry':
         state.error = null; state.data = null; render(); boot(); break;
       case 'demo-start':
@@ -680,6 +775,29 @@
         state.demoMenu = false; startDemo(t.dataset.key); break;
     }
   });
+
+  async function deleteDevice(id) {
+    if (state.busy) return;
+    state.busy = true; render();
+    try {
+      if (state.demo) {
+        await new Promise((r) => setTimeout(r, 500));
+        state.data.devices = state.data.devices.filter((d) => d.id !== id);
+      } else {
+        const res = await fetch(new URL('api/devices/delete', location.href), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ initData: state.tg.initData, id })
+        });
+        if (!res.ok) throw new Error(String(res.status));
+        state.data.devices = (await res.json()).devices;
+      }
+      haptic('ok'); toast('Устройство отвязано');
+    } catch (e) {
+      toast('Не получилось отвязать. Попробуйте ещё раз');
+    }
+    state.busy = false; state.confirmDevice = null; render();
+  }
 
   // ------------------------------------------------------------ boot
   function startDemo(key) {

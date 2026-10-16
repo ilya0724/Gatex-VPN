@@ -76,12 +76,28 @@ def test_normalize_new_and_old_shapes():
 
 
 class FakeRW:
-    def __init__(self, users):
-        self.users, self.calls = users, 0
+    def __init__(self, users, devices):
+        self.users, self.devices, self.calls, self.deleted = users, devices, 0, []
 
     async def users_by_telegram_id(self, tg_id):
         self.calls += 1
         return self.users
+
+    async def hwid_devices(self, user_uuid):
+        assert user_uuid == "uuid-1"
+        return list(self.devices)
+
+    async def delete_hwid_device(self, user_uuid, hwid):
+        self.deleted.append((user_uuid, hwid))
+        self.devices = [d for d in self.devices if d["hwid"] != hwid]
+
+
+DEVICES = [
+    {"hwid": "hw-old", "platform": "Windows", "osVersion": "11", "deviceModel": "PC",
+     "userAgent": "Happ/1.0", "createdAt": "2026-09-01T00:00:00Z", "updatedAt": "2026-09-02T00:00:00Z"},
+    {"hwid": "hw-new", "platform": "iOS", "osVersion": "18.1", "deviceModel": "iPhone15,2",
+     "userAgent": "Happ/3.0", "createdAt": "2026-10-01T00:00:00Z", "updatedAt": "2026-10-16T00:00:00Z"},
+]
 
 
 @pytest.fixture
@@ -90,7 +106,8 @@ async def client(aiohttp_client, tmp_path):
     application = cabinet.create_app(cfg(web_dir=tmp_path))
     application.on_startup.clear()
     application.on_cleanup.clear()
-    fake = FakeRW([{"status": "ACTIVE", "expireAt": "2099-01-01T00:00:00Z", "shortUuid": "s1"}])
+    fake = FakeRW([{"uuid": "uuid-1", "status": "ACTIVE", "expireAt": "2099-01-01T00:00:00Z",
+                    "shortUuid": "s1"}], DEVICES)
     application["rw"] = fake
     c = await aiohttp_client(application)
     c.fake = fake
@@ -104,8 +121,25 @@ async def test_me_endpoint(client):
     assert body["user"]["id"] == 42
     assert body["subscription"]["status"] == "active"
     assert body["links"]["bot"] == "https://t.me/gatexvpn_bot"
+    assert [d["platform"] for d in body["devices"]] == ["iOS", "Windows"]  # newest first
+    text = json.dumps(body)
+    assert "hw-new" not in text and "uuid-1" not in text  # credentials stay server-side
     await client.post("/api/me", json={"initData": init_data()})
     assert client.fake.calls == 1  # second call served from cache
+
+
+async def test_device_delete(client):
+    me = await (await client.post("/api/me", json={"initData": init_data()})).json()
+    target = next(d["id"] for d in me["devices"] if d["platform"] == "Windows")
+    r = await client.post("/api/devices/delete", json={"initData": init_data(), "id": target})
+    assert r.status == 200
+    assert [d["platform"] for d in (await r.json())["devices"]] == ["iOS"]
+    assert client.fake.deleted == [("uuid-1", "hw-old")]
+
+    r = await client.post("/api/devices/delete", json={"initData": init_data(), "id": "nope"})
+    assert r.status == 404
+    r = await client.post("/api/devices/delete", json={"initData": "bad", "id": target})
+    assert r.status == 401
 
 
 async def test_me_rejects_bad_init_data(client):
