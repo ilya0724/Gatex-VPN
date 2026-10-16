@@ -1,0 +1,738 @@
+/* GateX personal cabinet (Telegram Mini App). No build step, no framework.
+ * Data: POST api/me with Telegram initData (see ../server/app.py).
+ * Outside Telegram the page shows a gate screen, or demo data in preview builds. */
+(function () {
+  'use strict';
+
+  // ------------------------------------------------------------ helpers
+  const $ = (s, r = document) => r.querySelector(s);
+  const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ESC[c]);
+  const DAY = 86400000;
+
+  function plural(n, forms) {
+    const a = Math.abs(n) % 100, b = a % 10;
+    if (a > 10 && a < 20) return forms[2];
+    if (b > 1 && b < 5) return forms[1];
+    if (b === 1) return forms[0];
+    return forms[2];
+  }
+  function fmtDate(iso) {
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }).replace(/\s?г\.?$/, '');
+  }
+  function fmtBytes(n) {
+    n = Number(n) || 0;
+    const gb = n / 1073741824;
+    if (gb >= 1) return (gb >= 100 ? Math.round(gb) : gb.toFixed(1)).toString().replace('.', ',') + ' ГБ';
+    return Math.max(0, Math.round(n / 1048576)) + ' МБ';
+  }
+  function fmtAgo(iso) {
+    const t = new Date(iso).getTime();
+    if (!t) return null;
+    const m = Math.round((Date.now() - t) / 60000);
+    if (m < 3) return 'сейчас в сети';
+    if (m < 60) return m + ' ' + plural(m, ['минуту', 'минуты', 'минут']) + ' назад';
+    const h = Math.round(m / 60);
+    if (h < 24) return h + ' ' + plural(h, ['час', 'часа', 'часов']) + ' назад';
+    const d = Math.round(h / 24);
+    if (d === 1) return 'вчера';
+    if (d < 30) return d + ' ' + plural(d, ['день', 'дня', 'дней']) + ' назад';
+    return fmtDate(iso);
+  }
+  function store(key, val) {
+    try {
+      if (val === undefined) return localStorage.getItem(key);
+      localStorage.setItem(key, val);
+    } catch (e) { /* storage blocked */ }
+    return null;
+  }
+
+  // ------------------------------------------------------------ icons
+  const P = {
+    gate: '<path d="M3 21V10a9 9 0 0 1 18 0v11"/><path d="M7.5 21v-9.5a4.5 4.5 0 0 1 9 0V21"/><path d="M2 21h20"/><path d="m10.4 13.4 3.2 3.2m0-3.2-3.2 3.2"/>',
+    home: '<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
+    plug: '<path d="M9 2v5M15 2v5M6 7h12v4a6 6 0 0 1-12 0zM12 17v5"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+    help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.2a2.6 2.6 0 0 1 5 .8c0 1.7-2.5 2.3-2.5 4"/><path d="M12 17.5h.01"/>',
+    copy: '<rect x="9" y="9" width="12" height="12" rx="2.5"/><path d="M5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    chevR: '<path d="m9 6 6 6-6 6"/>',
+    chevL: '<path d="m15 6-6 6 6 6"/>',
+    close: '<path d="M18 6 6 18M6 6l12 12"/>',
+    download: '<path d="M12 3v12m0 0 5-5m-5 5-5-5M4 21h16"/>',
+    qr: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 14h3v3h-3zM21 14v.01M14 21h.01M17.5 21H21v-3.5"/>',
+    phone: '<rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/>',
+    monitor: '<rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>',
+    laptop: '<rect x="4" y="4" width="16" height="11" rx="1.5"/><path d="M2 19h20"/>',
+    tv: '<rect x="2" y="7" width="20" height="13" rx="2"/><path d="m8 3 4 4 4-4"/>',
+    terminal: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/>',
+    bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7z"/>',
+    gift: '<rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v9h14v-9M12 8v13M12 8s-1.5-5-4-5a2.5 2.5 0 0 0 0 5M12 8s1.5-5 4-5a2.5 2.5 0 0 1 0 5"/>',
+    megaphone: '<path d="M3 11v3a1 1 0 0 0 1 1h3l6 4V6L7 10H4a1 1 0 0 0-1 1zM17 9a4 4 0 0 1 0 6"/>',
+    send: '<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>',
+    card: '<rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20M6 15h4"/>',
+    chat: '<path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12z"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01"/>',
+    book: '<path d="M4 19.5V5a2.5 2.5 0 0 1 2.5-2.5H20v17H6.5A2.5 2.5 0 0 0 4 22a2.5 2.5 0 0 1 0-2.5"/><path d="M8 7h8M8 11h6"/>',
+    link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+    power: '<path d="M12 2v9"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/>',
+    signal: '<path d="M2 20h.01M7 20v-4M12 20v-8M17 20V8M22 20V4"/>',
+    spark: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M5.6 18.4l2.8-2.8M15.6 8.4l2.8-2.8"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/>',
+    refresh: '<path d="M20 11a8 8 0 0 0-14.9-3M4 4v4h4M4 13a8 8 0 0 0 14.9 3M20 20v-4h-4"/>',
+    globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>'
+  };
+  const ic = (name, cls) => '<svg class="icon' + (cls ? ' ' + cls : '') + '" viewBox="0 0 24 24" aria-hidden="true">' + (P[name] || '') + '</svg>';
+
+  // ------------------------------------------------------------ platforms
+  const HAPP = 'https://github.com/Happ-proxy/happ-desktop/releases/latest/download/';
+  const PLATFORMS = {
+    ios: {
+      name: 'iPhone и iPad', label: 'iPhone', icon: 'phone', sub: 'iOS, iPadOS',
+      stores: [
+        { title: 'App Store', note: 'Apple ID из России', url: 'https://apps.apple.com/ru/app/happ-lite/id6799917773', main: true },
+        { title: 'App Store', note: 'Apple ID другой страны', url: 'https://apps.apple.com/us/app/happ-proxy-utility/id6504287215' }
+      ],
+      install: 'Откройте App Store и установите Happ. Если у вас российский Apple ID, берите первую кнопку, если зарубежный, вторую.',
+      allow: 'iPhone спросит «Разрешить добавление конфигураций VPN?». Нажмите «Разрешить» и подтвердите код-паролем или Face ID.'
+    },
+    android: {
+      name: 'Android', label: 'Android', icon: 'phone', sub: 'телефоны и планшеты',
+      stores: [
+        { title: 'Google Play', note: 'обычная установка', url: 'https://play.google.com/store/apps/details?id=com.happproxy', main: true },
+        { title: 'Скачать APK', note: 'если Google Play не открывается', url: 'https://github.com/Happ-proxy/happ-android/releases/latest/download/Happ.apk' }
+      ],
+      install: 'Установите Happ из Google Play. Если магазина нет или он не открывается, скачайте APK и разрешите браузеру установку приложений.',
+      allow: 'Android покажет «Запрос на подключение». Нажмите «ОК», это разрешение для VPN.'
+    },
+    windows: {
+      name: 'Windows', label: 'Windows', icon: 'monitor', sub: 'Windows 10 и 11',
+      stores: [
+        { title: 'Скачать для Windows', note: 'обычный компьютер (x64)', url: HAPP + 'setup-Happ.x64.exe', main: true },
+        { title: 'Версия для ARM', note: 'Surface и ноутбуки на Snapdragon', url: HAPP + 'setup-Happ.arm64.exe' }
+      ],
+      install: 'Скачайте установщик и запустите его. Если появится синее окно SmartScreen, нажмите «Подробнее», затем «Выполнить в любом случае».',
+      allow: 'Если Windows спросит разрешение на изменения, нажмите «Да».'
+    },
+    macos: {
+      name: 'macOS', label: 'Mac', icon: 'laptop', sub: 'MacBook, iMac',
+      stores: [
+        { title: 'App Store', note: 'Apple ID из России', url: 'https://apps.apple.com/ru/app/happ-proxy-utility/id6783623643', main: true },
+        { title: 'App Store', note: 'Apple ID другой страны', url: 'https://apps.apple.com/us/app/happ-proxy-utility/id6504287215' },
+        { title: 'Скачать DMG', note: 'без App Store', url: HAPP + 'Happ.macOS.universal.dmg' }
+      ],
+      install: 'Установите Happ из App Store. Без App Store скачайте DMG и перетащите Happ в «Программы».',
+      allow: 'macOS попросит разрешить добавление конфигурации VPN. Нажмите «Разрешить».'
+    },
+    linux: {
+      name: 'Linux', label: 'Linux', icon: 'terminal', sub: 'Ubuntu, Fedora, Arch',
+      stores: [
+        { title: 'Пакет .deb', note: 'Ubuntu, Debian, Mint', url: HAPP + 'Happ.linux.x64.deb', main: true },
+        { title: 'Пакет .rpm', note: 'Fedora, openSUSE', url: HAPP + 'Happ.linux.x64.rpm' }
+      ],
+      install: 'Скачайте пакет под ваш дистрибутив и установите его двойным кликом или через пакетный менеджер.',
+      allow: 'Для режима VPN Happ может попросить пароль администратора.'
+    },
+    tv: {
+      name: 'Телевизор', label: 'ТВ', icon: 'tv', sub: 'Android TV, Apple TV',
+      stores: [
+        { title: 'Google Play', note: 'Android TV, Google TV', url: 'https://play.google.com/store/apps/details?id=com.happproxy', main: true },
+        { title: 'App Store', note: 'Apple TV', url: 'https://apps.apple.com/us/app/happ-proxy-utility-for-tv/id6748297274' }
+      ],
+      install: 'На телевизоре откройте магазин приложений, найдите Happ и установите. Кнопки ниже откроют страницу приложения, чтобы проверить название.',
+      allow: 'Телевизор спросит разрешение на VPN. Подтвердите пультом.'
+    }
+  };
+  const PLATFORM_ORDER = ['ios', 'android', 'windows', 'macos', 'linux', 'tv'];
+
+  function detectPlatform() {
+    const tp = state.tg && state.tg.platform;
+    if (tp === 'ios') return 'ios';
+    if (tp === 'android' || tp === 'android_x') return 'android';
+    if (tp === 'macos') return 'macos';
+    if (tp === 'tdesktop' || tp === 'unigram') {
+      return /Mac/i.test(navigator.userAgent) ? 'macos' : /Linux/i.test(navigator.userAgent) ? 'linux' : 'windows';
+    }
+    const ua = navigator.userAgent;
+    if (/iPhone|iPad|iPod/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1)) return 'ios';
+    if (/Android/i.test(ua)) return /TV|AFT|BRAVIA/i.test(ua) ? 'tv' : 'android';
+    if (/Windows/i.test(ua)) return 'windows';
+    if (/Mac/i.test(ua)) return 'macos';
+    if (/Linux|X11/i.test(ua)) return 'linux';
+    return 'android';
+  }
+
+  // ------------------------------------------------------------ demo data
+  const DEMO_SCENARIOS = {
+    fresh: { label: 'Новый пользователь, пробный период', days: 3, trial: true, used: 0, connected: false, onboard: true },
+    active: { label: 'Активная подписка', days: 23, used: 18.6 * 1073741824, connected: true },
+    expiring: { label: 'Заканчивается завтра', days: 1, used: 41.2 * 1073741824, limit: 50 * 1073741824, connected: true },
+    expired: { label: 'Подписка закончилась', days: -4, used: 7.3 * 1073741824, connected: true, status: 'expired' },
+    none: { label: 'Нет подписки', status: 'none' }
+  };
+  function demoData(key) {
+    const s = DEMO_SCENARIOS[key];
+    const sub = s.status === 'none' ? { status: 'none' } : {
+      status: s.status || 'active',
+      expire_at: new Date(Date.now() + s.days * DAY + 3600000).toISOString(),
+      is_trial: !!s.trial,
+      used_bytes: s.used || 0,
+      limit_bytes: s.limit || 0,
+      device_limit: 3,
+      online_at: s.connected ? new Date(Date.now() - 12 * 60000).toISOString() : null,
+      first_connected_at: s.connected ? new Date(Date.now() - 20 * DAY).toISOString() : null,
+      sub_url: 'https://app.fast-cloude-cdn.online/demo-7fK2pQ',
+      mirror_url: 'https://r1.fast-cloude-cdn.online/s/demo-7fK2pQ'
+    };
+    return {
+      user: { id: 700123456, first_name: 'Иван', last_name: '', username: 'ivan_demo', photo_url: '' },
+      subscription: sub,
+      links: { bot: 'https://t.me/gatexvpn_bot', buy: 'https://t.me/gatexvpn_bot', support: 'https://t.me/gatexvpn_bot', channel: 'https://t.me/gaatex_vpn', referral: 'https://t.me/gatexvpn_bot' },
+      price_from: null
+    };
+  }
+
+  // ------------------------------------------------------------ state
+  const state = {
+    tg: null,
+    demo: false,
+    demoKey: 'fresh',
+    demoMenu: false,
+    data: null,
+    error: null,
+    tab: 'home',
+    platform: 'android',
+    sheet: null // {kind:'welcome'} | {kind:'wizard', platform, remote, step} | {kind:'devices', remote}
+  };
+  const root = () => $('#app');
+
+  // ------------------------------------------------------------ Telegram glue
+  function loadTelegram() {
+    return new Promise((resolve) => {
+      if (!/tgWebApp/.test(location.hash + location.search)) return resolve(null);
+      const s = document.createElement('script');
+      s.src = 'https://telegram.org/js/telegram-web-app.js';
+      s.onload = () => resolve(window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData ? window.Telegram.WebApp : null);
+      s.onerror = () => resolve(null);
+      document.head.appendChild(s);
+    });
+  }
+  function haptic(kind) {
+    try {
+      const h = state.tg && state.tg.HapticFeedback;
+      if (!h) return;
+      if (kind === 'ok') h.notificationOccurred('success');
+      else h.impactOccurred(kind || 'light');
+    } catch (e) { /* old client */ }
+  }
+  function applyTheme() {
+    const tg = state.tg;
+    if (tg && tg.colorScheme) document.documentElement.setAttribute('data-theme', tg.colorScheme);
+    if (tg) {
+      const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+      try { tg.setHeaderColor(bg); tg.setBackgroundColor(bg); if (tg.setBottomBarColor) tg.setBottomBarColor(bg); } catch (e) { /* old client */ }
+    }
+  }
+  function cloudGet(key) {
+    return new Promise((resolve) => {
+      const cs = state.tg && state.tg.CloudStorage;
+      if (!cs || !state.tg.isVersionAtLeast || !state.tg.isVersionAtLeast('6.9')) return resolve(null);
+      try { cs.getItem(key, (err, v) => resolve(err ? null : v)); } catch (e) { resolve(null); }
+    });
+  }
+  function cloudSet(key, val) {
+    const cs = state.tg && state.tg.CloudStorage;
+    if (!cs || !state.tg.isVersionAtLeast || !state.tg.isVersionAtLeast('6.9')) return;
+    try { cs.setItem(key, val); } catch (e) { /* ignore */ }
+  }
+  function syncBackButton() {
+    const bb = state.tg && state.tg.BackButton;
+    if (!bb) return;
+    if (state.sheet) bb.show(); else bb.hide();
+  }
+
+  // links: real <a href> everywhere; inside Telegram we route clicks through the SDK
+  function openUrl(url) {
+    if (!url) return;
+    const tg = state.tg;
+    if (tg) {
+      if (/^https:\/\/t\.me\//.test(url)) tg.openTelegramLink(url);
+      else tg.openLink(url);
+    } else {
+      window.open(url, '_blank', 'noopener');
+    }
+  }
+  function openInHapp(subUrl) {
+    const deeplink = 'happ://add/' + subUrl;
+    if (state.demo) {
+      toast('В демо ссылка не откроется. В Telegram откроется Happ');
+      return;
+    }
+    // Telegram only opens http(s); open.html hands the custom scheme to the OS.
+    const bounce = new URL('open.html', location.href);
+    bounce.hash = encodeURIComponent(deeplink);
+    openUrl(bounce.toString());
+  }
+  function copy(text, okMsg) {
+    const done = () => { toast(okMsg || 'Скопировано'); haptic('ok'); };
+    const fallback = () => {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      ta.remove();
+      if (ok) done(); else toast('Не получилось скопировать. Выделите ссылку и скопируйте вручную');
+    };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
+      else fallback();
+    } catch (e) { fallback(); }
+  }
+  let toastTimer = 0;
+  function toast(msg) {
+    let t = $('#toast');
+    if (!t) { t = document.createElement('div'); t.id = 'toast'; t.className = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
+    t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  // ------------------------------------------------------------ subscription view-model
+  function vm() {
+    const d = state.data;
+    const s = (d && d.subscription) || { status: 'none' };
+    const exp = s.expire_at ? new Date(s.expire_at).getTime() : 0;
+    const daysLeft = exp ? Math.ceil((exp - Date.now()) / DAY) : null;
+    let tone = 'ok', title = 'Подписка активна', badge = null;
+    if (s.status === 'none') { tone = 'off'; title = 'Подписки пока нет'; }
+    else if (s.status === 'expired' || (daysLeft !== null && daysLeft <= 0)) { tone = 'off'; title = 'Подписка закончилась'; badge = { cls: 'danger', text: 'не активна' }; }
+    else if (s.status === 'limited') { tone = 'warn'; title = 'Трафик закончился'; badge = { cls: 'warn', text: 'лимит исчерпан' }; }
+    else if (s.status === 'disabled') { tone = 'off'; title = 'Подписка отключена'; badge = { cls: 'danger', text: 'отключена' }; }
+    else if (daysLeft !== null && daysLeft <= 3) { tone = 'warn'; badge = { cls: 'warn', text: 'осталось ' + daysLeft + ' ' + plural(daysLeft, ['день', 'дня', 'дней']) }; }
+    else if (daysLeft !== null) { badge = { cls: 'ok', text: 'ещё ' + daysLeft + ' ' + plural(daysLeft, ['день', 'дня', 'дней']) }; }
+    const active = tone !== 'off' && s.status !== 'limited';
+    return { s, exp, daysLeft, tone, title, badge, active, links: (d && d.links) || {}, price: d && d.price_from };
+  }
+
+  // ------------------------------------------------------------ screens
+  function header() {
+    return '<header class="topbar"><div class="brand"><span class="brand-mark">' + ic('gate') + '</span><span>Gate<b>X</b></span></div></header>';
+  }
+
+  function homeScreen() {
+    const v = vm(), s = v.s;
+    let sub = '';
+    if (s.status === 'none') sub = '<span>Оформите подписку в боте, и здесь появится всё для подключения</span>';
+    else if (v.exp) {
+      const word = v.exp > Date.now() ? 'до ' : 'закончилась ';
+      sub = '<span class="num">' + word + esc(fmtDate(s.expire_at)) + '</span>' + (v.badge ? '<span class="pill ' + v.badge.cls + '">' + esc(v.badge.text) + '</span>' : '') + (s.is_trial ? '<span class="pill">пробный период</span>' : '');
+    }
+
+    let html = header();
+    html += '<section class="hero" aria-label="Статус подписки">' +
+      '<div class="gate" data-tone="' + v.tone + '"><i class="ring r1"></i><i class="ring r2"></i><i class="ring r3"></i><div class="core">' + ic('gate') + '</div></div>' +
+      '<h1 class="hero-title">' + esc(v.title) + '</h1><div class="hero-sub">' + sub + '</div></section>';
+
+    if (s.status !== 'none') {
+      const online = s.online_at ? fmtAgo(s.online_at) : null;
+      const traffic = s.limit_bytes > 0
+        ? '<div class="stat wide"><span class="k">Трафик за период</span><span class="v">' + fmtBytes(s.used_bytes) + ' из ' + fmtBytes(s.limit_bytes) + '</span><div class="bar"><i style="width:' + Math.min(100, Math.round((s.used_bytes / s.limit_bytes) * 100)) + '%"></i></div></div>'
+        : '<div class="stat"><span class="k">Трафик</span><span class="v">без лимита</span></div>';
+      html += '<div class="stats">' + traffic +
+        (s.device_limit ? '<div class="stat"><span class="k">Устройства</span><span class="v">до ' + esc(s.device_limit) + '</span></div>' : '') +
+        '<div class="stat' + (s.limit_bytes > 0 || !s.device_limit ? '' : ' wide') + '"><span class="k">Последнее подключение</span><span class="v">' + esc(online || 'ещё не было') + '</span></div>' +
+        '</div>';
+    }
+
+    if (v.active && !s.first_connected_at) {
+      html += '<button class="callout" data-act="setup-here">' +
+        '<span class="ico">' + ic('bolt') + '</span><span><b>Вы ещё не подключались</b><span>Покажем по шагам, это пара минут</span></span><span class="chev">' + ic('chevR') + '</span></button>';
+    }
+
+    const price = v.price ? '<span class="spacer"></span><span class="aside">' + esc(v.price) + '</span>' : '';
+    if (s.status === 'none') {
+      html += '<a class="btn primary split" href="' + esc(v.links.buy) + '" data-link>' + ic('gift') + '<span>Получить доступ</span>' + price + '</a>';
+    } else {
+      const buyLabel = v.active ? 'Продлить подписку' : 'Возобновить подписку';
+      html += '<a class="btn ' + (v.active && v.tone === 'ok' ? 'ghost' : 'primary') + ' split" href="' + esc(v.links.buy) + '" data-link>' + ic('card') + '<span>' + buyLabel + '</span>' + price + '</a>';
+      html += '<button class="btn ' + (v.active && v.tone === 'ok' ? 'primary' : 'invert') + ' split" data-act="tab" data-tab="setup">' + ic('plug') + '<span>Установка и настройка</span><span class="spacer"></span>' + ic(PLATFORMS[state.platform].icon, 'sm') + '</button>';
+    }
+    return html;
+  }
+
+  function setupScreen() {
+    const p = PLATFORMS[state.platform];
+    const v = vm();
+    let html = header();
+    html += '<section class="setup-hero"><h1 class="h-display">Настройка на ' + esc(p.label === 'ТВ' ? 'телевизоре' : p.label) + '</h1>' +
+      '<p class="lead">Три шага, пара минут. Мы подскажем, куда нажимать.</p></section>';
+    html += '<div class="steps-mini">' +
+      '<div class="s"><span class="n">1</span><div><b>Установить Happ</b><span>бесплатное приложение для VPN</span></div></div>' +
+      '<div class="s"><span class="n">2</span><div><b>Добавить подписку</b><span>одной кнопкой, без ручного ввода</span></div></div>' +
+      '<div class="s"><span class="n">3</span><div><b>Подключиться</b><span>нажать большую кнопку в Happ</span></div></div>' +
+      '</div>';
+    if (v.s.status === 'none') {
+      html += '<div class="hint warn">' + ic('info') + '<span>Сначала нужна подписка: <b>оформите её в боте</b>, потом вернитесь сюда.</span></div>';
+    }
+    html += '<button class="btn primary" data-act="setup-here">' + ic(p.icon) + '<span>Начать настройку на этом устройстве</span></button>';
+    html += '<button class="btn ghost" data-act="devices" data-remote="1">' + ic('qr') + '<span>Установить на другом устройстве</span></button>';
+    html += '<div style="text-align:center"><button class="linkish" data-act="devices" data-remote="0">Это не ' + esc(p.label) + '? Выбрать устройство</button></div>';
+    return html;
+  }
+
+  function profileScreen() {
+    const d = state.data || {};
+    const u = d.user || {};
+    const v = vm(), s = v.s;
+    const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || (u.username ? '@' + u.username : 'Пользователь');
+    const initials = name.replace('@', '').split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+    let html = header();
+    html += '<div class="card"><div class="who"><div class="avatar">' + (u.photo_url ? '<img src="' + esc(u.photo_url) + '" alt="">' : esc(initials)) + '</div>' +
+      '<div class="txt"><b>' + esc(name) + '</b>' + (u.username ? '<span class="muted">@' + esc(u.username) + '</span><br>' : '') +
+      '<button class="idchip" data-act="copy" data-text="' + esc(u.id) + '" data-msg="ID скопирован">ID ' + esc(u.id) + ' ' + ic('copy', 'sm') + '</button></div></div></div>';
+
+    if (s.sub_url) {
+      html += '<h2 class="h-section">Ваша подписка</h2><div class="card">' +
+        '<p class="field-label">Ссылка для приложения</p>' + linkBox(s.sub_url) +
+        (s.mirror_url ? '<p class="field-label">Резервная ссылка, если основная не открывается</p>' + linkBox(s.mirror_url) : '') +
+        '<p class="muted" style="margin:0;font-size:13px">Никому не передавайте эти ссылки: по ним подключаются к вашей подписке.</p></div>';
+    }
+
+    html += '<h2 class="h-section">Аккаунт</h2><div class="list">' +
+      rowLink(v.links.buy, 'card', 'Продлить подписку', 'Оплата картой или звёздами в боте') +
+      rowLink(v.links.referral, 'gift', 'Пригласить друга', 'Бонусы за приглашения в боте') +
+      (v.links.channel ? rowLink(v.links.channel, 'megaphone', 'Канал GateX', 'Новости и статус серверов') : '') +
+      '<button class="row" data-act="welcome">' + rowInner('book', 'Пройти обучение заново', 'Пошаговая настройка с начала') + '</button>' +
+      '</div>';
+    return html;
+  }
+
+  function helpScreen() {
+    const v = vm();
+    const limit = v.s.device_limit;
+    let html = header();
+    html += '<div class="card accent"><span class="brand-mark" style="width:44px;height:44px;border-radius:14px">' + ic('chat') + '</span>' +
+      '<h1 class="h-display" style="font-size:22px">Нужна помощь?</h1>' +
+      '<p class="lead">Ответы на частые вопросы ниже. Если не нашли свой, напишите нам, отвечаем живыми людьми.</p>' +
+      '<a class="btn primary small" href="' + esc(v.links.support) + '" data-link>' + ic('send', 'sm') + '<span>Написать в поддержку</span></a></div>';
+
+    const faq = [
+      ['Не подключается. Что сделать?',
+        '<p>1. Проверьте на главной, что подписка активна.</p><p>2. В Happ <b>обновите подписку</b>: потяните список серверов вниз или нажмите значок обновления.</p><p>3. Выберите <b>другой сервер</b> и подключитесь снова.</p><p>4. Не помогло? Напишите в поддержку, приложите скриншот Happ.</p>'],
+      ['Интернет работает только для «разрешённых» сайтов',
+        '<p>Так выглядят <b>белые списки</b>: ВК, Госуслуги и Яндекс открываются, остальное нет. Чаще всего это мобильный интернет.</p><p>Выберите в Happ сервер <span class="chip-server">🇵🇱 Обход БС</span>. Он работает через российский адрес, который оператор пропускает.</p><p>Если подписка не добавляется в Happ, используйте <b>резервную ссылку</b> из профиля.</p>'],
+      ['Сколько устройств можно подключить?',
+        limit ? '<p>До <b>' + esc(limit) + ' ' + plural(limit, ['устройства', 'устройств', 'устройств']) + '</b> на одну подписку. Подключить ещё одно: вкладка «Настройка», кнопка «Установить на другом устройстве».</p>'
+          : '<p>Подключить ещё одно устройство можно во вкладке «Настройка», кнопка «Установить на другом устройстве». Лимит устройств зависит от тарифа.</p>'],
+      ['Работают ли банки и российские сайты?',
+        '<p>Да. Российские сайты идут напрямую, мимо VPN, поэтому банки, Госуслуги и маркетплейсы открываются как обычно.</p>'],
+      ['Медленно или постоянно отваливается',
+        '<p>Попробуйте сервер в другой стране: обычно быстрее всего Нидерланды и Франция. Если связь рвётся в метро или при смене Wi-Fi на мобильный, включите в Happ автоподключение.</p>'],
+      ['Как продлить подписку?',
+        '<p>Нажмите «Продлить подписку» на главной. Оплата в боте картой российского банка или звёздами Telegram. Ссылку в Happ менять не нужно, она та же.</p>']
+    ];
+    html += '<h2 class="h-section">Частые вопросы</h2><div class="faq">' +
+      faq.map((f) => '<details><summary>' + esc(f[0]) + '<span class="chev">' + ic('chevR', 'sm') + '</span></summary><div class="a">' + f[1] + '</div></details>').join('') +
+      '</div>';
+    html += '<div class="list">' +
+      '<button class="row" data-act="devices" data-remote="1">' + rowInner('qr', 'Установка на другом устройстве', 'Инструкция и QR-код') + '</button>' +
+      '<button class="row" data-act="welcome">' + rowInner('book', 'Обучение с начала', 'Ещё раз пройти все шаги') + '</button>' +
+      '</div>';
+    return html;
+  }
+
+  function linkBox(url) {
+    return '<div class="linkbox"><code>' + esc(url) + '</code><button class="iconbtn" aria-label="Скопировать ссылку" data-act="copy" data-text="' + esc(url) + '" data-msg="Ссылка скопирована">' + ic('copy', 'sm') + '</button></div>';
+  }
+  function rowInner(icon, title, sub) {
+    return '<span class="ico">' + ic(icon) + '</span><span class="txt"><b>' + esc(title) + '</b><span>' + esc(sub) + '</span></span><span class="chev">' + ic('chevR', 'sm') + '</span>';
+  }
+  function rowLink(url, icon, title, sub) {
+    return '<a class="row" href="' + esc(url) + '" data-link>' + rowInner(icon, title, sub) + '</a>';
+  }
+
+  function navBar() {
+    const tabs = [['home', 'home', 'Главная'], ['setup', 'plug', 'Настройка'], ['profile', 'user', 'Профиль'], ['help', 'help', 'Помощь']];
+    return '<nav class="nav" aria-label="Разделы"><div class="nav-inner">' + tabs.map((t) =>
+      '<button class="tab" data-act="tab" data-tab="' + t[0] + '"' + (state.tab === t[0] ? ' aria-current="page"' : '') + '>' + ic(t[1]) + '<span>' + t[2] + '</span></button>').join('') +
+      '</div></nav>';
+  }
+
+  // ------------------------------------------------------------ sheets
+  function welcomeSheet() {
+    const p = PLATFORMS[state.platform];
+    const name = state.data && state.data.user && state.data.user.first_name;
+    return '<div class="sheet-top"><span style="width:40px"></span><span class="title"></span><button class="iconbtn" aria-label="Закрыть" data-act="welcome-skip">' + ic('close', 'sm') + '</button></div>' +
+      '<div class="step-body">' +
+      '<div class="welcome-art"><div class="gate" data-tone="ok"><i class="ring r1"></i><i class="ring r2"></i><i class="ring r3"></i><div class="core">' + ic('gate') + '</div></div></div>' +
+      '<h1 class="h-display" style="text-align:center">' + (name ? esc(name) + ', добро пожаловать в GateX' : 'Добро пожаловать в GateX') + '</h1>' +
+      '<p class="lead" style="text-align:center">Подключим VPN на ' + esc(p.label === 'ТВ' ? 'телевизоре' : p.label) + ' за три шага. По пути объясним каждую кнопку.</p>' +
+      '<div class="steps-mini">' +
+      '<div class="s"><span class="n">1</span><div><b>Ставим Happ</b><span>приложение, через которое работает VPN</span></div></div>' +
+      '<div class="s"><span class="n">2</span><div><b>Добавляем подписку</b><span>одна кнопка, всё подставится само</span></div></div>' +
+      '<div class="s"><span class="n">3</span><div><b>Включаем</b><span>и проверяем, что всё открывается</span></div></div>' +
+      '</div></div>' +
+      '<div class="sheet-foot"><button class="btn primary" data-act="setup-here">Начать настройку</button>' +
+      '<button class="btn ghost small" data-act="welcome-skip">У меня уже всё работает</button></div>';
+  }
+
+  function devicesSheet() {
+    const sh = state.sheet;
+    return '<div class="sheet-top"><button class="iconbtn" aria-label="Назад" data-act="back">' + ic('chevL', 'sm') + '</button><span class="title">' + (sh.remote ? 'Другое устройство' : 'Выбор устройства') + '</span><span style="width:40px"></span></div>' +
+      '<div class="step-body"><h1 class="h-display">' + (sh.remote ? 'Куда подключаем?' : 'Какое у вас устройство?') + '</h1>' +
+      '<p class="lead">' + (sh.remote ? 'Выберите устройство. Покажем, что установить, и дадим QR-код, чтобы не набирать ссылку вручную.' : 'Мы определили устройство автоматически, но могли ошибиться. Выберите своё.') + '</p>' +
+      '<div class="devices">' + PLATFORM_ORDER.map((k) => {
+        const p = PLATFORMS[k];
+        return '<button class="device' + (!sh.remote && k === state.platform ? ' current' : '') + '" data-act="pick-device" data-platform="' + k + '"><span class="ico">' + ic(p.icon) + '</span><b>' + esc(p.name) + '</b><span>' + esc(p.sub) + '</span></button>';
+      }).join('') + '</div></div>';
+  }
+
+  function wizardSheet() {
+    const w = state.sheet;
+    const p = PLATFORMS[w.platform];
+    const s = vm().s;
+    const title = 'Настройка · ' + p.label;
+    let top = '<div class="sheet-top"><button class="iconbtn" aria-label="Назад" data-act="back">' + ic('chevL', 'sm') + '</button><span class="title">' + esc(title) + '</span><button class="iconbtn" aria-label="Закрыть" data-act="close">' + ic('close', 'sm') + '</button></div>';
+    if (w.step < 3) top += '<div class="progress" aria-label="Шаг ' + (w.step + 1) + ' из 3">' + [0, 1, 2].map((i) => '<i class="' + (i <= w.step ? 'on' : '') + '"></i>').join('') + '</div>';
+
+    let body = '', foot = '';
+    if (w.step === 0) {
+      body = '<span class="step-kicker">Шаг 1 из 3</span><h1 class="h-display">Установите Happ</h1>' +
+        '<p class="lead">' + esc(p.install) + '</p>' +
+        '<div class="store-list">' + p.stores.map((st) =>
+          '<a class="btn ' + (st.main ? 'invert' : 'ghost') + ' split" href="' + esc(st.url) + '" data-link>' + ic('download') + '<span><span style="display:block">' + esc(st.title) + '</span><span class="note">' + esc(st.note) + '</span></span><span class="spacer"></span>' + ic('chevR', 'sm') + '</a>').join('') + '</div>' +
+        (w.remote ? '<div class="hint">' + ic('info') + '<span>Ссылки откроются здесь. На ' + esc(p.label === 'ТВ' ? 'телевизоре' : 'другом устройстве') + ' найдите <b>Happ</b> в магазине приложений по названию.</span></div>'
+          : '<div class="hint">' + ic('info') + '<span>Happ уже установлен? Просто нажмите <b>«Дальше»</b>.</span></div>');
+      foot = '<button class="btn primary" data-act="next">Happ установлен, дальше</button>';
+    } else if (w.step === 1) {
+      if (s.status === 'none' || !s.sub_url) {
+        body = '<span class="step-kicker">Шаг 2 из 3</span><h1 class="h-display">Нужна подписка</h1><p class="lead">Чтобы добавить VPN в Happ, сначала оформите подписку или пробный период в боте. Потом вернитесь сюда, мы продолжим с этого шага.</p>';
+        foot = '<a class="btn primary" href="' + esc(vm().links.buy) + '" data-link>' + ic('gift') + '<span>Оформить в боте</span></a>';
+      } else if (!w.remote) {
+        body = '<span class="step-kicker">Шаг 2 из 3</span><h1 class="h-display">Добавьте подписку</h1>' +
+          '<p class="lead">Нажмите кнопку: откроется Happ, и все серверы GateX появятся в нём сами.</p>' +
+          '<div class="step-art">' + ic('link') + '</div>' +
+          '<button class="btn primary" data-act="happ">' + ic('plug') + '<span>Добавить в Happ</span></button>' +
+          '<details class="hint" style="display:block"><summary>' + ic('copy', 'sm') + '<span>Не открылось? Добавим вручную</span><span class="chev">' + ic('chevR', 'sm') + '</span></summary>' +
+          '<ol class="orderlist" style="margin-top:12px"><li><span>Скопируйте ссылку ниже.</span></li><li><span>Откройте Happ и нажмите <b>«+»</b> вверху справа.</span></li><li><span>Выберите <b>вставку из буфера обмена</b>.</span></li></ol>' +
+          '<div style="margin-top:12px">' + linkBox(s.sub_url) + '</div>' +
+          (s.mirror_url ? '<p style="margin:12px 0 6px">Ссылка не добавляется или серверы не загружаются? Возьмите резервную:</p>' + linkBox(s.mirror_url) : '') +
+          '</details>';
+        foot = '<button class="btn ghost" data-act="next">Подписка добавлена, дальше</button>';
+      } else {
+        body = '<span class="step-kicker">Шаг 2 из 3</span><h1 class="h-display">Добавьте подписку</h1>' +
+          '<p class="lead">' + (w.platform === 'tv' ? 'В Happ на телевизоре выберите добавление подписки по QR-коду или ссылке.' : 'Откройте Happ на том устройстве, нажмите <b>«+»</b> и отсканируйте этот код.') + '</p>' +
+          '<div class="qr" role="img" aria-label="QR-код ссылки на подписку">' + qrSvg(s.sub_url) + '</div>' +
+          linkBox(s.sub_url) +
+          '<div class="btn-row"><button class="btn ghost small" data-act="copy" data-text="' + esc(s.sub_url) + '" data-msg="Ссылка скопирована">' + ic('copy', 'sm') + '<span>Копировать</span></button>' +
+          '<a class="btn ghost small" href="' + esc('https://t.me/share/url?url=' + encodeURIComponent(s.sub_url) + '&text=' + encodeURIComponent('Ссылка на подписку GateX')) + '" data-link>' + ic('send', 'sm') + '<span>Себе в Telegram</span></a></div>' +
+          '<div class="hint">' + ic('info') + '<span>Камеры нет? Отправьте ссылку себе в Telegram, откройте её на том устройстве и вставьте в Happ через <b>«+»</b>.</span></div>';
+        foot = '<button class="btn primary" data-act="next">Подписка добавлена, дальше</button>';
+      }
+    } else if (w.step === 2) {
+      body = '<span class="step-kicker">Шаг 3 из 3</span><h1 class="h-display">Включите VPN</h1>' +
+        '<div class="step-art">' + ic('power') + '</div>' +
+        '<ol class="orderlist"><li><span>Откройте <b>Happ</b>.</span></li><li><span>Нажмите <b>большую кнопку</b> в центре экрана. Сервер выбирается автоматически.</span></li><li><span>' + esc(p.allow) + '</span></li></ol>' +
+        '<div class="hint warn">' + ic('signal') + '<span>Мобильный интернет пускает только на «разрешённые» сайты? Выберите в списке серверов <span class="chip-server">🇵🇱 Обход БС</span>.</span></div>';
+      foot = '<button class="btn primary" data-act="next">Подключилось</button><button class="btn ghost small" data-act="tab-help">Не получается</button>';
+    } else {
+      body = '<div class="welcome-art"><div class="gate" data-tone="ok"><i class="ring r1"></i><i class="ring r2"></i><i class="ring r3"></i><div class="core">' + ic('check') + '</div></div></div>' +
+        '<h1 class="h-display" style="text-align:center">Готово, вы под защитой</h1>' +
+        '<p class="lead" style="text-align:center">Откройте любой сайт или приложение, чтобы проверить. Дальше Happ можно просто держать включённым.</p>' +
+        '<div class="hint">' + ic('qr') + '<span>Хотите подключить ещё ноутбук или телевизор? Вкладка <b>«Настройка»</b>, кнопка <b>«Установить на другом устройстве»</b>.</span></div>';
+      foot = '<button class="btn primary" data-act="finish">В личный кабинет</button>';
+    }
+    return top + '<div class="step-body enter">' + body + '</div><div class="sheet-foot">' + foot + '</div>';
+  }
+
+  function qrSvg(text) {
+    if (typeof window.qrcode !== 'function') return '';
+    const q = window.qrcode(0, 'M');
+    q.addData(text); q.make();
+    const n = q.getModuleCount();
+    let d = '';
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) d += 'M' + c + ' ' + r + 'h1v1h-1z';
+    return '<svg viewBox="0 0 ' + n + ' ' + n + '" shape-rendering="crispEdges"><path style="fill:var(--qr-ink)" d="' + d + '"/></svg>';
+  }
+
+  // ------------------------------------------------------------ render
+  function render() {
+    const el = root();
+    if (state.error) { el.innerHTML = errorScreen(); return; }
+    if (!state.data) { el.innerHTML = loadingScreen(); return; }
+    const screens = { home: homeScreen, setup: setupScreen, profile: profileScreen, help: helpScreen };
+    el.innerHTML = '<main class="app">' + screens[state.tab]() + '</main>' + navBar() + demoBar();
+    renderSheet();
+  }
+  let lastSheetKey = '';
+  function renderSheet() {
+    let sheet = $('#sheet');
+    const sh = state.sheet;
+    document.body.classList.toggle('has-sheet', !!sh);
+    if (!sh) { if (sheet) sheet.remove(); lastSheetKey = ''; syncBackButton(); return; }
+    if (!sheet) {
+      sheet = document.createElement('div');
+      sheet.id = 'sheet'; sheet.className = 'sheet enter';
+      sheet.setAttribute('role', 'dialog'); sheet.setAttribute('aria-modal', 'true');
+      document.body.appendChild(sheet);
+    }
+    const key = sh.kind + (sh.step || 0) + (sh.platform || '');
+    const html = sh.kind === 'welcome' ? welcomeSheet() : sh.kind === 'devices' ? devicesSheet() : wizardSheet();
+    sheet.innerHTML = '<div class="sheet-inner">' + html + '</div>';
+    if (key !== lastSheetKey) sheet.scrollTop = 0;
+    lastSheetKey = key;
+    syncBackButton();
+  }
+  function loadingScreen() {
+    return '<main class="app">' + header() + '<div class="center-screen"><div class="gate" data-tone="ok"><i class="ring r1"></i><i class="ring r2"></i><div class="core">' + ic('gate') + '</div></div><p class="muted">Загружаем кабинет…</p></div></main>';
+  }
+  function errorScreen() {
+    const e = state.error;
+    if (e === 'outside') {
+      return '<main class="app">' + header() + '<div class="center-screen"><div class="gate" data-tone="off"><i class="ring r1"></i><i class="ring r2"></i><div class="core">' + ic('gate') + '</div></div>' +
+        '<h1 class="hero-title">Откройте кабинет в Telegram</h1><p class="lead">Личный кабинет работает внутри бота GateX: так мы узнаём, что это вы, без паролей.</p>' +
+        '<a class="btn primary" href="https://t.me/gatexvpn_bot" style="max-width:320px">' + ic('send') + '<span>Открыть бота</span></a>' +
+        '<button class="linkish" data-act="demo-start">Посмотреть, как выглядит кабинет</button></div></main>';
+    }
+    return '<main class="app">' + header() + '<div class="center-screen"><div class="gate" data-tone="warn"><i class="ring r1"></i><i class="ring r2"></i><div class="core">' + ic('refresh') + '</div></div>' +
+      '<h1 class="hero-title">Не удалось загрузить данные</h1><p class="lead">' + (e === 'unauthorized' ? 'Сессия устарела. Закройте кабинет и откройте его снова из бота.' : 'Сервер не ответил. Проверьте интернет и попробуйте ещё раз.') + '</p>' +
+      '<button class="btn primary" data-act="retry" style="max-width:320px">Повторить</button></div></main>';
+  }
+  function demoBar() {
+    if (!state.demo) return '';
+    return '<div class="demo-bar"><button data-act="demo-menu" aria-expanded="' + state.demoMenu + '">Демо-данные ▾</button>' +
+      (state.demoMenu ? '<div class="demo-menu"><p>Пример, не настоящий пользователь</p>' + Object.keys(DEMO_SCENARIOS).map((k) =>
+        '<button data-act="demo-set" data-key="' + k + '" aria-pressed="' + (state.demoKey === k) + '">' + esc(DEMO_SCENARIOS[k].label) + '</button>').join('') +
+        '<button data-act="welcome">Показать обучение</button></div>' : '') + '</div>';
+  }
+
+  // ------------------------------------------------------------ actions
+  function finishOnboarding() {
+    store('gx_onboarded', '1');
+    cloudSet('gx_onboarded', '1');
+  }
+  function openWizard(platform, remote) {
+    state.sheet = { kind: 'wizard', platform, remote: !!remote, step: 0, prev: state.sheet };
+    renderSheet();
+  }
+  function goBack() {
+    const sh = state.sheet;
+    if (!sh) return;
+    if (sh.kind === 'wizard' && sh.step > 0 && sh.step < 3) { sh.step--; renderSheet(); return; }
+    if (sh.kind === 'welcome') finishOnboarding();
+    state.sheet = sh.prev || null;
+    if (state.sheet && state.sheet.kind === 'wizard') state.sheet = null;
+    renderSheet();
+  }
+
+  document.addEventListener('click', (ev) => {
+    const a = ev.target.closest('a[data-link]');
+    if (a && state.tg) { ev.preventDefault(); haptic(); openUrl(a.href); return; }
+    const t = ev.target.closest('[data-act]');
+    if (!t) return;
+    const act = t.dataset.act;
+    switch (act) {
+      case 'tab':
+        haptic('light');
+        state.tab = t.dataset.tab; state.sheet = null;
+        render(); window.scrollTo(0, 0); break;
+      case 'tab-help':
+        state.sheet = null; state.tab = 'help'; render(); window.scrollTo(0, 0); break;
+      case 'setup-here':
+        haptic('light');
+        if (state.sheet && state.sheet.kind === 'welcome') finishOnboarding();
+        state.sheet = null; openWizard(state.platform, false); break;
+      case 'devices':
+        haptic('light');
+        state.sheet = { kind: 'devices', remote: t.dataset.remote === '1', prev: null }; renderSheet(); break;
+      case 'pick-device': {
+        const remote = state.sheet && state.sheet.remote;
+        const devices = state.sheet;
+        if (!remote) { state.platform = t.dataset.platform; store('gx_platform', state.platform); render(); }
+        state.sheet = { kind: 'wizard', platform: t.dataset.platform, remote, step: 0, prev: devices };
+        renderSheet(); break;
+      }
+      case 'next':
+        haptic('light');
+        state.sheet.step++; renderSheet();
+        if (state.sheet.step === 3) haptic('ok');
+        break;
+      case 'back': goBack(); break;
+      case 'close': state.sheet = null; renderSheet(); break;
+      case 'finish':
+        finishOnboarding(); state.sheet = null; state.tab = 'home'; render(); break;
+      case 'welcome':
+        state.demoMenu = false; state.sheet = { kind: 'welcome' }; render(); break;
+      case 'welcome-skip':
+        finishOnboarding(); state.sheet = null; renderSheet(); break;
+      case 'happ':
+        haptic('medium'); openInHapp(vm().s.sub_url); break;
+      case 'copy':
+        copy(t.dataset.text, t.dataset.msg); break;
+      case 'retry':
+        state.error = null; state.data = null; render(); boot(); break;
+      case 'demo-start':
+        startDemo('fresh'); break;
+      case 'demo-menu':
+        state.demoMenu = !state.demoMenu; render(); break;
+      case 'demo-set':
+        state.demoMenu = false; startDemo(t.dataset.key); break;
+    }
+  });
+
+  // ------------------------------------------------------------ boot
+  function startDemo(key) {
+    state.demo = true; state.demoKey = key; state.error = null;
+    state.data = demoData(key);
+    state.tab = 'home';
+    state.sheet = DEMO_SCENARIOS[key].onboard ? { kind: 'welcome' } : null;
+    render();
+  }
+
+  async function fetchMe() {
+    const res = await fetch(new URL('api/me', location.href), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData: state.tg.initData })
+    });
+    if (res.status === 401) throw new Error('unauthorized');
+    if (!res.ok) throw new Error('server');
+    return res.json();
+  }
+
+  async function boot() {
+    if (!state.tg) {
+      if (window.GATEX_PREVIEW) startDemo('fresh');
+      else { state.error = 'outside'; render(); }
+      return;
+    }
+    try {
+      const [data, cloudFlag] = await Promise.all([fetchMe(), cloudGet('gx_onboarded')]);
+      state.data = data;
+      const s = data.subscription || {};
+      const onboarded = store('gx_onboarded') === '1' || cloudFlag === '1';
+      if (!onboarded && (s.status === 'active' || s.status === 'none') && !s.first_connected_at) state.sheet = { kind: 'welcome' };
+      render();
+    } catch (e) {
+      state.error = e.message === 'unauthorized' ? 'unauthorized' : 'server';
+      render();
+    }
+  }
+
+  async function init() {
+    state.tg = await loadTelegram();
+    if (state.tg) {
+      try { state.tg.ready(); state.tg.expand(); } catch (e) { /* ignore */ }
+      state.tg.onEvent && state.tg.onEvent('themeChanged', applyTheme);
+      state.tg.BackButton && state.tg.BackButton.onClick(goBack);
+    }
+    applyTheme();
+    const saved = store('gx_platform');
+    state.platform = PLATFORMS[saved] ? saved : detectPlatform();
+    render();
+    boot();
+  }
+
+  init();
+})();

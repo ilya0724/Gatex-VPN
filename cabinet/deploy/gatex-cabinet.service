@@ -1,0 +1,20 @@
+[Unit]
+Description=GateX personal cabinet (Telegram Mini App)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/opt/gatex-cabinet/cabinet/server
+EnvironmentFile=/opt/gatex-cabinet/cabinet/server/.env
+ExecStart=/opt/gatex-cabinet/venv/bin/python app.py
+Restart=always
+RestartSec=3
+User=nobody
+Group=nogroup
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

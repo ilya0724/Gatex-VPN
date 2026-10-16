@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Открываем Happ</title>
+<style>
+  :root { --bg: #06110e; --text: #eaf5f0; --muted: #8ea89f; --accent: #2ee6a6; --ink: #03241a; color-scheme: dark; }
+  @media (prefers-color-scheme: light) { :root { --bg: #edf4f0; --text: #0b1f18; --muted: #587066; --accent: #0fa874; --ink: #fff; color-scheme: light; } }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, sans-serif; text-align: center; padding: 24px; box-sizing: border-box; }
+  main { max-width: 360px; display: flex; flex-direction: column; gap: 14px; }
+  h1 { font-size: 22px; margin: 0; }
+  p { margin: 0; color: var(--muted); }
+  a { display: block; padding: 16px; border-radius: 16px; background: var(--accent); color: var(--ink); font-weight: 700; text-decoration: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Открываем Happ…</h1>
+  <p id="msg">Если приложение не открылось само, нажмите кнопку. Если и она не помогает, установите Happ и вернитесь в кабинет.</p>
+  <a id="go" href="#">Открыть Happ</a>
+</main>
+<script>
+  // Hands a custom-scheme link to the OS. Only Happ links are allowed, so the page can't be used as an open redirect.
+  (function () {
+    var raw = '';
+    try { raw = decodeURIComponent(location.hash.slice(1)); } catch (e) { raw = ''; }
+    var ok = /^happ:\/\/add\/https:\/\/[^\s<>"']+$/.test(raw);
+    var go = document.getElementById('go');
+    if (!ok) {
+      document.getElementById('msg').textContent = 'Ссылка повреждена. Вернитесь в кабинет и нажмите «Добавить в Happ» ещё раз.';
+      go.hidden = true;
+      return;
+    }
+    go.href = raw;
+    location.href = raw;
+  })();
+</script>
+</body>
+</html>
