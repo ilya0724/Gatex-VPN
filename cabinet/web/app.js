@@ -54,7 +54,6 @@
 
   // ------------------------------------------------------------ icons
   const P = {
-    gate: '<path d="M3 21V10a9 9 0 0 1 18 0v11"/><path d="M7.5 21v-9.5a4.5 4.5 0 0 1 9 0V21"/><path d="M2 21h20"/><path d="m10.4 13.4 3.2 3.2m0-3.2-3.2 3.2"/>',
     home: '<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
     plug: '<path d="M9 2v5M15 2v5M6 7h12v4a6 6 0 0 1-12 0zM12 17v5"/>',
     user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
@@ -86,6 +85,12 @@
     refresh: '<path d="M20 11a8 8 0 0 0-14.9-3M4 4v4h4M4 13a8 8 0 0 0 14.9 3M20 20v-4h-4"/>',
     globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>'
   };
+  // GX monogram from the brand kit (static_D): G in the text colour, X in the
+  // accent, so the status tone still recolours it.
+  const GX_G = 'M838 325Q835 257 810.5 195.5Q786 134 739.5 86.0Q693 38 623.5 11.0Q554 -16 462 -16Q374 -16 297.0 9.5Q220 35 161.5 85.0Q103 135 70.5 208.0Q38 281 38 375Q38 469 71.0 542.0Q104 615 163.5 665.0Q223 715 301.5 740.5Q380 766 473 766Q597 766 687.0 728.0Q777 690 832.0 624.0Q887 558 903 471H694Q684 509 653.5 536.5Q623 564 577.5 578.5Q532 593 474 593Q404 593 353.0 568.5Q302 544 274.0 495.5Q246 447 246 375Q246 302 276.0 252.0Q306 202 361.5 177.0Q417 152 492 152Q565 152 621.0 172.5Q677 193 710.5 233.0Q744 273 749 329ZM512 242V388H910V0H763L734 297L773 242Z';
+  const GX_X = 'M513 327V453L881 0H626L383 314H485L241 0H-11L359 452V328L11 750H270L490 466H388L605 750H860Z';
+  const gx = (cls) => '<svg class="gx' + (cls ? ' ' + cls : '') + '" viewBox="28 -776 1824 802" aria-hidden="true"><g transform="scale(1 -1)">' +
+    '<path class="gx-g" d="' + GX_G + '"/><path class="gx-x" transform="translate(961 0)" d="' + GX_X + '"/></g></svg>';
   const ic = (name, cls) => '<svg class="icon' + (cls ? ' ' + cls : '') + '" viewBox="0 0 24 24" aria-hidden="true">' + (P[name] || '') + '</svg>';
 
   // ------------------------------------------------------------ platforms
@@ -346,7 +351,7 @@
 
   // ------------------------------------------------------------ screens
   function header() {
-    return '<header class="topbar"><div class="brand"><span class="brand-mark">' + ic('gate') + '</span><span>Gate<b>X</b></span></div></header>';
+    return '<header class="topbar"><div class="brand"><span class="brand-logo">' + gx() + '</span><span>Gate<b>X</b></span></div></header>';
   }
 
   function homeScreen() {
@@ -361,7 +366,7 @@
 
     let html = header();
     html += '<section class="hero" aria-label="Статус подписки">' +
-      '<div class="gate" data-tone="' + v.tone + '"><i class="ring r1"></i><i class="ring r2"></i><i class="ring r3"></i><div class="core">' + ic('gate') + '</div></div>' +
+      '<div class="gate" data-tone="' + v.tone + '"><i class="ring r1"></i><i class="ring r2"></i><i class="ring r3"></i><div class="core">' + gx() + '</div></div>' +
       '<h1 class="hero-title">' + esc(v.title) + '</h1><div class="hero-sub">' + sub + '</div></section>';
 
     if (s.status !== 'none') {
@@ -594,7 +599,7 @@
     const name = state.data && state.data.user && state.data.user.first_name;
     return '<div class="sheet-top"><span style="width:40px"></span><span class="title"></span><button class="iconbtn" aria-label="Закрыть" data-act="welcome-skip">' + ic('close', 'sm') + '</button></div>' +
       '<div class="step-body">' +
-      '<div class="welcome-art"><div class="gate" data-tone="ok"><i class="ring r1"></i><i class="ring r2"></i><i class="ring r3"></i><div class="core">' + ic('gate') + '</div></div></div>' +
+      '<div class="welcome-art"><div class="gate" data-tone="ok"><i class="ring r1"></i><i class="ring r2"></i><i class="ring r3"></i><div class="core">' + gx() + '</div></div></div>' +
       '<h1 class="h-display" style="text-align:center">' + (name ? esc(name) + ', добро пожаловать в GateX' : 'Добро пожаловать в GateX') + '</h1>' +
       '<p class="lead" style="text-align:center">Подключим VPN на ' + esc(p.label === 'ТВ' ? 'телевизоре' : p.label) + ' за три шага. По пути объясним каждую кнопку.</p>' +
       '<div class="steps-mini">' +
@@ -898,12 +903,12 @@
     syncBackButton();
   }
   function loadingScreen() {
-    return '<main class="app">' + header() + '<div class="center-screen"><div class="gate" data-tone="ok"><i class="ring r1"></i><i class="ring r2"></i><div class="core">' + ic('gate') + '</div></div><p class="muted">Загружаем кабинет…</p></div></main>';
+    return '<main class="app">' + header() + '<div class="center-screen"><div class="gate" data-tone="ok"><i class="ring r1"></i><i class="ring r2"></i><div class="core">' + gx('spin') + '</div></div><p class="muted">Загружаем кабинет…</p></div></main>';
   }
   function errorScreen() {
     const e = state.error;
     if (e === 'outside') {
-      return '<main class="app">' + header() + '<div class="center-screen"><div class="gate" data-tone="off"><i class="ring r1"></i><i class="ring r2"></i><div class="core">' + ic('gate') + '</div></div>' +
+      return '<main class="app">' + header() + '<div class="center-screen"><div class="gate" data-tone="off"><i class="ring r1"></i><i class="ring r2"></i><div class="core">' + gx() + '</div></div>' +
         '<h1 class="hero-title">Откройте кабинет в Telegram</h1><p class="lead">Личный кабинет работает внутри бота GateX: так мы узнаём, что это вы, без паролей.</p>' +
         '<a class="btn primary" href="https://t.me/gatexvpn_bot" style="max-width:320px">' + ic('send') + '<span>Открыть бота</span></a>' +
         '<button class="linkish" data-act="demo-start">Посмотреть, как выглядит кабинет</button></div></main>';
