@@ -241,3 +241,15 @@ async def test_pay_goes_through_the_bot_for_new_tariffs(aiohttp_client, aiohttp_
         assert r.status == 403 and (await r.json())["error"] == "old_tariff"
     finally:
         await session.close()
+
+
+async def test_page_assets_are_revalidated(aiohttp_client, tmp_path):
+    (tmp_path / "vendor").mkdir()
+    (tmp_path / "app.js").write_text("1")
+    (tmp_path / "vendor" / "qrcode.js").write_text("2")
+    application = cabinet.create_app(cfg(web_dir=tmp_path))
+    application.on_startup.clear()
+    application.on_cleanup.clear()
+    c = await aiohttp_client(application)
+    assert (await c.get("/app.js")).headers["Cache-Control"] == "no-cache"
+    assert "max-age" in (await c.get("/vendor/qrcode.js")).headers["Cache-Control"]

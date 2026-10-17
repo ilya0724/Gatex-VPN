@@ -456,7 +456,10 @@ async def handle_static(request: web.Request) -> web.StreamResponse:
         path = path / "index.html"
     if not path.is_file():
         raise web.HTTPNotFound()
-    cache = "no-cache" if path.suffix == ".html" else "public, max-age=3600"
+    # Telegram's webview keeps cached assets across launches; revalidate the
+    # page's own files so a deploy shows up on the next open. Vendored
+    # libraries never change and can stay cached.
+    cache = "public, max-age=86400" if "vendor" in path.relative_to(root).parts else "no-cache"
     return web.FileResponse(path, headers={"Cache-Control": cache})
 
 
