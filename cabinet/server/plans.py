@@ -4,10 +4,11 @@ Pure data and arithmetic, no imports beyond the standard library, so the
 bot can load the same file and both sides agree on every price.
 
 A tariff is a plan (eco or family), with or without the whitelist bypass
-("обход БС": the LTE ОСНОВНАЯ hosts and the third-party whitelist configs).
+("обход БС": the two LTE ОСНОВНАЯ hosts in Poland).
 More devices are sold in whole packs of the plan's base size at the same
 price per pack. The plan is stored as the Remnawave user tag; users without
-one of these tags are on the old tariffs and are left alone.
+one of these tags are on the old tariffs: they keep them until their
+subscription ends, and a purchase switches them to the new tariff then.
 """
 
 from __future__ import annotations

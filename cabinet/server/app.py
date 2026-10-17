@@ -326,8 +326,6 @@ async def _load(request: web.Request, tg_id: int, fresh: bool = False) -> dict:
     tag = (user or {}).get("tag")
     entry = {
         "key": key,
-        # No panel user yet means someone new; an untagged user is on the old tariffs.
-        "new_flow": user is None or tag in plans.NEW_FLOW_TAGS,
         "tariff": plans.tariff_from_tag(tag, (user or {}).get("hwidDeviceLimit")),
         "raw_devices": devices,
         "subscription": normalize_subscription(user, request.app["cfg"]),
@@ -364,9 +362,10 @@ async def handle_me(request: web.Request) -> web.Response:
         "devices": entry["devices"],
         "links": public_links(cfg),
         "price_from": cfg.price_from or None,
-        "new_flow": entry["new_flow"],
+        # null tariff: an old-tariff user; a purchase starts the new tariff
+        # when their current subscription ends (the bot handles that)
         "tariff": entry["tariff"],
-        "plans": plans.catalog() if entry["new_flow"] else None,
+        "plans": plans.catalog(),
     })
 
 
@@ -413,13 +412,6 @@ async def handle_pay(request: web.Request) -> web.Response:
         return json_response({"error": "bad_order"}, 400)
     if not cfg.bot_pay_url:
         return json_response({"error": "payments_unavailable"}, 503)
-    try:
-        entry = await _load(request, tg_id)
-    except Exception:
-        log.exception("panel lookup failed for %s", tg_id)
-        return json_response({"error": "panel_unavailable"}, 502)
-    if not entry["new_flow"]:
-        return json_response({"error": "old_tariff"}, 403)
 
     payload = {"initData": body["initData"], "plan": order["plan"], "bypass": order["bypass"],
                "devices": order["devices"], "months": order["months"], "method": method}
@@ -439,6 +431,7 @@ async def handle_pay(request: web.Request) -> web.Response:
         log.error("bot payment call for %s returned %s", tg_id, status)
         return json_response({"error": "payments_unavailable"}, 502)
     log.info("tg %s payment %s for %s", tg_id, data.get("payment_id"), order["tag"])
+    request.app["cache"].pop(tg_id, None)
     return json_response({"pay_url": pay_url, "amount": order["amount"]})
 
 

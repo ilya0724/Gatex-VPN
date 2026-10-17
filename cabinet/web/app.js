@@ -171,6 +171,7 @@
     fresh: { label: 'Новый пользователь, пробный период', days: 3, trial: true, used: 0, connected: false, onboard: true, devices: 0 },
     active: { label: 'Активная подписка', days: 23, used: 18.6 * 1073741824, connected: true, devices: 2, tariff: { code: 'family', title: 'Семейный', bypass: true, devices: 7 } },
     expiring: { label: 'Заканчивается завтра, все места заняты', days: 1, used: 41.2 * 1073741824, limit: 50 * 1073741824, connected: true, devices: 3 },
+    legacy: { label: 'Старый тариф, подписка активна', days: 40, used: 52.3 * 1073741824, connected: true, devices: 3 },
     expired: { label: 'Подписка закончилась', days: -4, used: 7.3 * 1073741824, connected: true, status: 'expired', devices: 1 },
     none: { label: 'Нет подписки', status: 'none' }
   };
@@ -212,7 +213,6 @@
       })),
       links: { bot: 'https://t.me/gatexvpn_bot', buy: 'https://t.me/gatexvpn_bot', support: 'https://t.me/gatexvpn_bot', channel: 'https://t.me/gaatex_vpn', referral: 'https://t.me/gatexvpn_bot' },
       price_from: null,
-      new_flow: true,
       tariff: s.tariff || (s.trial ? { code: 'trial', title: 'Пробный', bypass: true, devices: 2 } : null),
       plans: DEMO_PLANS
     };
@@ -340,7 +340,7 @@
     else if (daysLeft !== null) { badge = { cls: 'ok', text: 'ещё ' + daysLeft + ' ' + plural(daysLeft, ['день', 'дня', 'дней']) }; }
     const active = tone !== 'off' && s.status !== 'limited';
     return { s, exp, daysLeft, tone, title, badge, active, links: (d && d.links) || {}, price: d && d.price_from,
-      newFlow: !!(d && d.new_flow && d.plans), tariff: (d && d.tariff) || null };
+      newFlow: !!(d && d.plans), tariff: (d && d.tariff) || null };
   }
 
   // ------------------------------------------------------------ screens
@@ -629,7 +629,7 @@
   function plansSheet() {
     const sh = state.sheet;
     if (sh.stage === 'pay') return payStage(sh);
-    if (sh.stage === 'done') return paidStage();
+    if (sh.stage === 'done') return paidStage(sh);
     const p = planOf(sh.plan);
     const total = planPrice(p, sh.bypass, sh.devices, sh.months);
     const full = planPrice(p, sh.bypass, sh.devices, 1) * sh.months;
@@ -672,7 +672,9 @@
     }).join('') + '</div>';
 
     let note = '';
-    if (t && t.code === sh.plan && !!t.bypass === sh.bypass && s.expire_at && vm().active) {
+    if (!t && vm().active && s.expire_at) {
+      note = 'Сейчас у вас прежний тариф, он работает без изменений до ' + fmtDate(s.expire_at) + '. Новый тариф включится после этой даты, оплаченные дни добавятся к ней.';
+    } else if (t && t.code === sh.plan && !!t.bypass === sh.bypass && s.expire_at && vm().active) {
       note = 'Дни добавятся к текущей подписке, она действует до ' + fmtDate(s.expire_at) + '.';
     } else if (t && t.code !== 'trial' && vm().active) {
       note = 'Это смена тарифа: новый срок начнётся с оплаты, а оставшиеся дни текущего тарифа пересчитаем по стоимости и добавим.';
@@ -709,12 +711,18 @@
       '<button class="linkish" data-act="back">Изменить тариф</button></div>';
   }
 
-  function paidStage() {
+  function paidStage(sh) {
     const v = vm();
+    const p = planOf(sh.plan);
+    // old-tariff users keep their tariff until it runs out; the new one starts then
+    const later = !v.tariff && sh.switchAt && new Date(sh.switchAt).getTime() > Date.now();
+    const what = later
+      ? 'Тариф «' + p.title + (sh.bypass ? ' + обход БС' : '') + '», ' + devWord(sh.devices) + ', включится ' + fmtDate(sh.switchAt) + '. До этого всё работает как сейчас. '
+      : (v.tariff ? tariffName(v.tariff) + ', ' + devWord(v.tariff.devices) + '. ' : '');
     return '<div class="sheet-top"><span style="width:40px"></span><span class="title"></span><button class="iconbtn" aria-label="Закрыть" data-act="close">' + ic('close', 'sm') + '</button></div>' +
       '<div class="step-body enter"><div class="welcome-art"><div class="gate" data-tone="ok"><i class="ring r1"></i><i class="ring r2"></i><i class="ring r3"></i><div class="core">' + ic('check') + '</div></div></div>' +
       '<h1 class="h-display" style="text-align:center">Оплата прошла</h1>' +
-      '<p class="lead" style="text-align:center">' + (v.tariff ? esc(tariffName(v.tariff)) + ', ' + devWord(v.tariff.devices) + '. ' : '') + (v.s.expire_at ? 'Подписка действует до ' + esc(fmtDate(v.s.expire_at)) + '.' : '') + '</p>' +
+      '<p class="lead" style="text-align:center">' + esc(what) + (v.s.expire_at ? 'Подписка действует до ' + esc(fmtDate(v.s.expire_at)) + '.' : '') + '</p>' +
       '<div class="hint">' + ic('refresh') + '<span>Если Happ уже настроен, <b>обновите подписку</b> в нём, чтобы подтянулись серверы тарифа.</span></div>' +
       '</div><div class="sheet-foot"><button class="btn primary" data-act="close">Готово</button>' +
       (v.s.first_connected_at ? '' : '<button class="btn ghost small" data-act="setup-here">Настроить подключение</button>') + '</div>';
@@ -731,7 +739,9 @@
     if (!sh || sh.busy) return;
     haptic('medium');
     if (state.demo) {
-      sh.stage = 'pay'; sh.amount = planPrice(planOf(sh.plan), sh.bypass, sh.devices, sh.months); renderSheet(); return;
+      sh.stage = 'pay'; sh.amount = planPrice(planOf(sh.plan), sh.bypass, sh.devices, sh.months);
+      sh.switchAt = vm().active ? vm().s.expire_at : null;
+      renderSheet(); return;
     }
     sh.busy = true; renderSheet();
     try {
@@ -743,11 +753,11 @@
       const body = await res.json().catch(() => ({}));
       if (!res.ok || !body.pay_url) throw new Error(body.error || String(res.status));
       sh.before = subSnapshot();
+      sh.switchAt = vm().active ? vm().s.expire_at : null;
       sh.payUrl = body.pay_url; sh.amount = body.amount; sh.stage = 'pay';
       haptic('ok');
     } catch (e) {
-      toast(e.message === 'old_tariff' ? 'Ваш тариф продлевается в боте, кнопка «Купить»'
-        : e.message === 'unauthorized' ? 'Сессия устарела. Откройте кабинет из бота заново'
+      toast(e.message === 'unauthorized' ? 'Сессия устарела. Откройте кабинет из бота заново'
           : 'Не получилось создать счёт. Попробуйте ещё раз или напишите в поддержку');
     }
     sh.busy = false;
@@ -988,10 +998,15 @@
       case 'plan-check':
         checkPayment(false); break;
       case 'plan-demo-paid': {
-        const sh = state.sheet, p = planOf(sh.plan);
-        state.data.tariff = { code: p.code, title: p.title, bypass: sh.bypass, devices: sh.devices };
-        state.data.subscription = Object.assign({}, state.data.subscription, { status: 'active', is_trial: false, device_limit: sh.devices,
-          expire_at: new Date(Date.now() + sh.months * 30 * DAY).toISOString() });
+        const sh = state.sheet, p = planOf(sh.plan), cur = state.data.subscription;
+        const days = sh.months * 30 * DAY;
+        if (!state.data.tariff && vm().active) {
+          state.data.subscription = Object.assign({}, cur, { expire_at: new Date(new Date(cur.expire_at).getTime() + days).toISOString() });
+        } else {
+          state.data.tariff = { code: p.code, title: p.title, bypass: sh.bypass, devices: sh.devices };
+          state.data.subscription = Object.assign({}, cur, { status: 'active', is_trial: false, device_limit: sh.devices,
+            expire_at: new Date(Date.now() + days).toISOString() });
+        }
         sh.stage = 'done'; haptic('ok'); render(); break;
       }
       case 'retry':

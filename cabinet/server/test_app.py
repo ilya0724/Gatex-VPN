@@ -215,7 +215,7 @@ async def test_pay_goes_through_the_bot_for_new_tariffs(aiohttp_client, aiohttp_
     c = await aiohttp_client(application)
     try:
         me = await (await c.post("/api/me", json={"initData": init_data()})).json()
-        assert me["new_flow"] is True and me["tariff"]["code"] == "trial"
+        assert me["tariff"]["code"] == "trial"
         assert me["subscription"]["is_trial"] is True
         assert [p["code"] for p in me["plans"]["plans"]] == ["eco", "family"]
 
@@ -233,12 +233,13 @@ async def test_pay_goes_through_the_bot_for_new_tariffs(aiohttp_client, aiohttp_
         assert r.status == 401
         assert len(seen) == 1
 
-        fake.users[0]["tag"] = None  # an old user keeps the old tariffs
+        # an old-tariff user can buy too; the bot defers the switch to their expiry
+        fake.users[0]["tag"] = None
         application["cache"].clear()
         me = await (await c.post("/api/me", json={"initData": init_data()})).json()
-        assert me["new_flow"] is False and me["plans"] is None
+        assert me["tariff"] is None and me["plans"]["plans"]
         r = await c.post("/api/pay", json=order)
-        assert r.status == 403 and (await r.json())["error"] == "old_tariff"
+        assert r.status == 200 and len(seen) == 2
     finally:
         await session.close()
 
