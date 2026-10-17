@@ -5,6 +5,7 @@ with Telegram initData:
   POST /api/me              subscription and devices from the Remnawave API
   POST /api/devices/delete  unlinks one of the user's own HWID devices
   POST /api/pay             asks the bot for a payment link for a new tariff
+  POST /api/referral        the user's invite link and how many friends joined
 That unlink is the only write to the panel; payments and activation stay in
 the bot.
 """
@@ -48,6 +49,8 @@ class Config:
     mirror_url_template: str = ""
     trial_tag: str = plans.TRIAL["tag"]
     bot_pay_url: str = ""
+    bot_me_url: str = ""
+    referral_bonus_percent: int = 25
     web_dir: Path = field(default=WEB_DIR)
 
     @classmethod
@@ -71,6 +74,8 @@ class Config:
             mirror_url_template=get("MIRROR_URL_TEMPLATE"),
             trial_tag=get("TRIAL_TAG") or plans.TRIAL["tag"],
             bot_pay_url=get("BOT_PAY_URL"),
+            bot_me_url=get("BOT_ME_URL"),
+            referral_bonus_percent=int(get("REFERRAL_BONUS_PERCENT", "25") or 25),
             web_dir=Path(get("WEB_DIR") or WEB_DIR),
         )
 
@@ -435,6 +440,36 @@ async def handle_pay(request: web.Request) -> web.Response:
     return json_response({"pay_url": pay_url, "amount": order["amount"]})
 
 
+async def handle_referral(request: web.Request) -> web.Response:
+    """Invite link plus the friend count from the bot's own /api/me.
+
+    The link format is fixed, so the page still gets it when the bot is down.
+    """
+    cfg: Config = request.app["cfg"]
+    init, body = await _auth(request)
+    if not init:
+        return json_response({"error": "unauthorized"}, 401)
+    tg_id = int(init["user"]["id"])
+    out = {"link": f"https://t.me/{cfg.bot_username}?start=ref{tg_id}", "count": None,
+           "bonus_percent": cfg.referral_bonus_percent}
+    if cfg.bot_me_url:
+        http: ClientSession = request.app["http"]
+        try:
+            async with http.get(cfg.bot_me_url, headers={"X-Init-Data": body["initData"]},
+                                timeout=ClientTimeout(total=5)) as resp:
+                data = await resp.json(content_type=None) if resp.status == 200 else None
+        except (ClientError, TimeoutError, ValueError):
+            log.warning("bot referral lookup failed for %s", tg_id)
+            data = None
+        if isinstance(data, dict):
+            link = data.get("referral_link")
+            if isinstance(link, str) and link.startswith("https://t.me/"):
+                out["link"] = link
+            if isinstance(data.get("referral_count"), int):
+                out["count"] = data["referral_count"]
+    return json_response(out)
+
+
 async def handle_health(request: web.Request) -> web.Response:
     return json_response({"ok": True})
 
@@ -475,6 +510,7 @@ def create_app(cfg: Config) -> web.Application:
     app.router.add_post("/api/me", handle_me)
     app.router.add_post("/api/devices/delete", handle_device_delete)
     app.router.add_post("/api/pay", handle_pay)
+    app.router.add_post("/api/referral", handle_referral)
     app.router.add_get("/api/health", handle_health)
     app.router.add_get("/{path:.*}", handle_static)
     return app

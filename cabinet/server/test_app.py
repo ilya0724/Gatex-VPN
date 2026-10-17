@@ -254,3 +254,29 @@ async def test_page_assets_are_revalidated(aiohttp_client, tmp_path):
     c = await aiohttp_client(application)
     assert (await c.get("/app.js")).headers["Cache-Control"] == "no-cache"
     assert "max-age" in (await c.get("/vendor/qrcode.js")).headers["Cache-Control"]
+
+
+async def test_referral_link_with_and_without_the_bot(aiohttp_client, aiohttp_server, tmp_path):
+    from aiohttp import ClientSession, web as aweb
+
+    async def bot_me(request):
+        assert request.headers["X-Init-Data"]
+        return aweb.json_response({"referral_link": "https://t.me/gatexvpn_bot?start=ref42", "referral_count": 3})
+
+    bot = aweb.Application()
+    bot.router.add_get("/api/me", bot_me)
+    bot_server = await aiohttp_server(bot)
+    session = ClientSession()
+    try:
+        for url, count in ((str(bot_server.make_url("/api/me")), 3), ("", None)):
+            application = cabinet.create_app(cfg(web_dir=tmp_path, bot_me_url=url))
+            application.on_startup.clear()
+            application.on_cleanup.clear()
+            application["http"] = session
+            c = await aiohttp_client(application)
+            r = await c.post("/api/referral", json={"initData": init_data()})
+            assert r.status == 200
+            assert await r.json() == {"link": "https://t.me/gatexvpn_bot?start=ref42", "count": count, "bonus_percent": 25}
+            assert (await c.post("/api/referral", json={"initData": "bad"})).status == 401
+    finally:
+        await session.close()

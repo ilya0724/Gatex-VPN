@@ -229,6 +229,7 @@
     tab: 'home',
     platform: 'android',
     confirmDevice: null,
+    ref: null, // {link, count, bonus_percent} from api/referral
     busy: false,
     sheet: null // {kind:'welcome'} | {kind:'wizard', platform, remote, step} | {kind:'devices', remote}
   };
@@ -504,15 +505,30 @@
         '<p class="muted" style="margin:0;font-size:13px">Никому не передавайте эти ссылки: по ним подключаются к вашей подписке.</p></div>';
     }
 
+    html += referralBlock();
+
     html += '<h2 class="h-section">Аккаунт</h2><div class="list">' +
       (v.newFlow
         ? '<button class="row" data-act="plans">' + rowInner('card', 'Купить подписку', v.tariff && v.tariff.code !== 'trial' ? 'Сейчас: ' + tariffName(v.tariff) + ', ' + devWord(v.tariff.devices) : 'Тарифы, устройства, оплата по СБП') + '</button>'
         : rowLink(v.links.buy, 'card', 'Продлить подписку', 'Оплата картой или звёздами в боте')) +
-      rowLink(v.links.referral, 'gift', 'Пригласить друга', 'Бонусы за приглашения в боте') +
       (v.links.channel ? rowLink(v.links.channel, 'megaphone', 'Канал GateX', 'Новости и статус серверов') : '') +
       '<button class="row" data-act="welcome">' + rowInner('book', 'Пройти обучение заново', 'Пошаговая настройка с начала') + '</button>' +
       '</div>';
     return html;
+  }
+
+  function referralBlock() {
+    const r = state.ref;
+    if (!r) return '';
+    const share = 'https://t.me/share/url?url=' + encodeURIComponent(r.link) + '&text=' + encodeURIComponent('Пользуюсь GateX VPN, подключайся по моей ссылке');
+    return '<h2 class="h-section">Пригласите друга</h2><div class="card accent">' +
+      '<div class="ref-head"><span class="brand-mark">' + ic('gift') + '</span><span><b>+' + esc(r.bonus_percent) + '% дней за каждую оплату друга</b>' +
+      '<span>Друг подключается по вашей ссылке, а вам начисляется ' + esc(r.bonus_percent) + '% от дней каждой его оплаты.</span></span></div>' +
+      linkBox(r.link) +
+      '<div class="btn-row"><button class="btn ghost small" data-act="copy" data-text="' + esc(r.link) + '" data-msg="Ссылка скопирована">' + ic('copy', 'sm') + '<span>Копировать</span></button>' +
+      '<a class="btn primary small" href="' + esc(share) + '" data-link>' + ic('send', 'sm') + '<span>Поделиться</span></a></div>' +
+      (r.count !== null && r.count !== undefined ? '<p class="muted" style="margin:0;font-size:13px">Приглашено друзей: <b style="color:var(--text)">' + esc(r.count) + '</b></p>' : '') +
+      '</div>';
   }
 
   function helpScreen() {
@@ -1047,6 +1063,7 @@
   function startDemo(key) {
     state.demo = true; state.demoKey = key; state.error = null;
     state.data = demoData(key);
+    state.ref = { link: 'https://t.me/gatexvpn_bot?start=ref700123456', count: 2, bonus_percent: 25 };
     state.tab = 'home';
     state.sheet = DEMO_SCENARIOS[key].onboard ? { kind: 'welcome' } : null;
     render();
@@ -1063,6 +1080,19 @@
     return res.json();
   }
 
+  async function fetchReferral() {
+    try {
+      const res = await fetch(new URL('api/referral', location.href), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: state.tg.initData })
+      });
+      if (!res.ok) return;
+      state.ref = await res.json();
+      if (state.tab === 'profile') render();
+    } catch (e) { /* the profile just shows no invite block */ }
+  }
+
   async function boot() {
     if (!state.tg) {
       if (window.GATEX_PREVIEW) startDemo('fresh');
@@ -1072,6 +1102,7 @@
     try {
       const [data, cloudFlag] = await Promise.all([fetchMe(), cloudGet('gx_onboarded')]);
       state.data = data;
+      fetchReferral();
       const s = data.subscription || {};
       const onboarded = store('gx_onboarded') === '1' || cloudFlag === '1';
       if (!onboarded && (s.status === 'active' || s.status === 'none') && !s.first_connected_at) state.sheet = { kind: 'welcome' };

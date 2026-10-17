@@ -355,3 +355,9 @@ body.has-sheet .demo-bar { display: none; }
   .chips { grid-template-columns: repeat(2, 1fr); row-gap: 14px; }
   .switch-row .txt span { display: none; }
 }
+
+/* ---------- referral */
+.ref-head { display: flex; gap: 12px; align-items: flex-start; }
+.ref-head .brand-mark { width: 40px; height: 40px; border-radius: 12px; flex: none; }
+.ref-head b { display: block; font-size: 15.5px; }
+.ref-head span span { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
