@@ -189,3 +189,55 @@ async def test_remnawave_3x_fallbacks(aiohttp_client):
         await rw.delete_hwid_device(key, "hw-1")
         assert seen["delete"] == {"userId": 2, "hwid": "hw-1"}
         assert await rw.users_by_telegram_id(9999) == []
+
+
+async def test_pay_goes_through_the_bot_for_new_tariffs(aiohttp_client, aiohttp_server, tmp_path):
+    from aiohttp import ClientSession, web as aweb
+
+    seen = []
+
+    async def bot_pay(request):
+        seen.append(await request.json())
+        return aweb.json_response({"pay_url": "https://pay.example/x", "amount": 1079, "payment_id": "p1"})
+
+    bot = aweb.Application()
+    bot.router.add_post("/api/plan/pay", bot_pay)
+    bot_server = await aiohttp_server(bot)
+
+    application = cabinet.create_app(cfg(web_dir=tmp_path, bot_pay_url=str(bot_server.make_url("/api/plan/pay"))))
+    application.on_startup.clear()
+    application.on_cleanup.clear()
+    fake = FakeRW([{"uuid": "uuid-1", "status": "ACTIVE", "expireAt": "2099-01-01T00:00:00Z",
+                    "shortUuid": "s1", "tag": "TRIAL", "hwidDeviceLimit": 2}], [])
+    application["rw"] = fake
+    session = ClientSession()
+    application["http"] = session
+    c = await aiohttp_client(application)
+    try:
+        me = await (await c.post("/api/me", json={"initData": init_data()})).json()
+        assert me["new_flow"] is True and me["tariff"]["code"] == "trial"
+        assert me["subscription"]["is_trial"] is True
+        assert [p["code"] for p in me["plans"]["plans"]] == ["eco", "family"]
+
+        order = {"initData": init_data(), "plan": "family", "bypass": True, "devices": 7, "months": 3, "method": "sbp"}
+        r = await c.post("/api/pay", json=order)
+        assert r.status == 200
+        assert await r.json() == {"pay_url": "https://pay.example/x", "amount": 1079}
+        assert seen[0]["plan"] == "family" and seen[0]["bypass"] is True and seen[0]["initData"]
+
+        r = await c.post("/api/pay", json={**order, "devices": 8})
+        assert r.status == 400
+        r = await c.post("/api/pay", json={**order, "method": "cash"})
+        assert r.status == 400
+        r = await c.post("/api/pay", json={**order, "initData": "bad"})
+        assert r.status == 401
+        assert len(seen) == 1
+
+        fake.users[0]["tag"] = None  # an old user keeps the old tariffs
+        application["cache"].clear()
+        me = await (await c.post("/api/me", json={"initData": init_data()})).json()
+        assert me["new_flow"] is False and me["plans"] is None
+        r = await c.post("/api/pay", json=order)
+        assert r.status == 403 and (await r.json())["error"] == "old_tariff"
+    finally:
+        await session.close()

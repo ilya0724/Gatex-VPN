@@ -1,10 +1,12 @@
 """GateX personal cabinet: Telegram Mini App backend.
 
-Serves the static cabinet from ../web and two JSON endpoints, both checked
+Serves the static cabinet from ../web and JSON endpoints, all checked
 with Telegram initData:
   POST /api/me              subscription and devices from the Remnawave API
   POST /api/devices/delete  unlinks one of the user's own HWID devices
-That unlink is the only write to the panel.
+  POST /api/pay             asks the bot for a payment link for a new tariff
+That unlink is the only write to the panel; payments and activation stay in
+the bot.
 """
 
 from __future__ import annotations
@@ -20,7 +22,9 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import parse_qsl
 
-from aiohttp import ClientSession, ClientTimeout, web
+from aiohttp import ClientError, ClientSession, ClientTimeout, web
+
+import plans
 
 log = logging.getLogger("gatex-cabinet")
 
@@ -42,7 +46,8 @@ class Config:
     price_from: str = ""
     sub_url_template: str = ""
     mirror_url_template: str = ""
-    trial_tag: str = ""
+    trial_tag: str = plans.TRIAL["tag"]
+    bot_pay_url: str = ""
     web_dir: Path = field(default=WEB_DIR)
 
     @classmethod
@@ -64,7 +69,8 @@ class Config:
             price_from=get("PRICE_FROM"),
             sub_url_template=get("SUB_URL_TEMPLATE"),
             mirror_url_template=get("MIRROR_URL_TEMPLATE"),
-            trial_tag=get("TRIAL_TAG"),
+            trial_tag=get("TRIAL_TAG") or plans.TRIAL["tag"],
+            bot_pay_url=get("BOT_PAY_URL"),
             web_dir=Path(get("WEB_DIR") or WEB_DIR),
         )
 
@@ -317,8 +323,12 @@ async def _load(request: web.Request, tg_id: int, fresh: bool = False) -> dict:
             devices = await rw.hwid_devices(key)
         except Exception:
             log.exception("device lookup failed for %s", tg_id)
+    tag = (user or {}).get("tag")
     entry = {
         "key": key,
+        # No panel user yet means someone new; an untagged user is on the old tariffs.
+        "new_flow": user is None or tag in plans.NEW_FLOW_TAGS,
+        "tariff": plans.tariff_from_tag(tag, (user or {}).get("hwidDeviceLimit")),
         "raw_devices": devices,
         "subscription": normalize_subscription(user, request.app["cfg"]),
         "devices": normalize_devices(devices) if devices is not None else None,
@@ -339,12 +349,12 @@ def _profile(tg: dict) -> dict:
 
 async def handle_me(request: web.Request) -> web.Response:
     cfg: Config = request.app["cfg"]
-    init, _ = await _auth(request)
+    init, body = await _auth(request)
     if not init:
         return json_response({"error": "unauthorized"}, 401)
     tg_id = int(init["user"]["id"])
     try:
-        entry = await _load(request, tg_id)
+        entry = await _load(request, tg_id, fresh=body.get("fresh") is True)
     except Exception:
         log.exception("panel lookup failed for %s", tg_id)
         return json_response({"error": "panel_unavailable"}, 502)
@@ -354,6 +364,9 @@ async def handle_me(request: web.Request) -> web.Response:
         "devices": entry["devices"],
         "links": public_links(cfg),
         "price_from": cfg.price_from or None,
+        "new_flow": entry["new_flow"],
+        "tariff": entry["tariff"],
+        "plans": plans.catalog() if entry["new_flow"] else None,
     })
 
 
@@ -377,6 +390,56 @@ async def handle_device_delete(request: web.Request) -> web.Response:
         log.exception("device delete failed for %s", tg_id)
         return json_response({"error": "panel_unavailable"}, 502)
     return json_response({"devices": entry["devices"]})
+
+
+async def handle_pay(request: web.Request) -> web.Response:
+    """Price check here, then the bot creates the Platega payment.
+
+    The bot re-validates initData and recomputes the price from the same
+    plans.py, so this hop adds no trust; it only keeps one origin for the page.
+    """
+    cfg: Config = request.app["cfg"]
+    init, body = await _auth(request)
+    if not init:
+        return json_response({"error": "unauthorized"}, 401)
+    tg_id = int(init["user"]["id"])
+    try:
+        order = plans.make_order(body.get("plan"), body.get("bypass"),
+                                 body.get("devices"), body.get("months"))
+    except ValueError:
+        return json_response({"error": "bad_order"}, 400)
+    method = body.get("method")
+    if method not in ("sbp", "crypto"):
+        return json_response({"error": "bad_order"}, 400)
+    if not cfg.bot_pay_url:
+        return json_response({"error": "payments_unavailable"}, 503)
+    try:
+        entry = await _load(request, tg_id)
+    except Exception:
+        log.exception("panel lookup failed for %s", tg_id)
+        return json_response({"error": "panel_unavailable"}, 502)
+    if not entry["new_flow"]:
+        return json_response({"error": "old_tariff"}, 403)
+
+    payload = {"initData": body["initData"], "plan": order["plan"], "bypass": order["bypass"],
+               "devices": order["devices"], "months": order["months"], "method": method}
+    http: ClientSession = request.app["http"]
+    try:
+        async with http.post(cfg.bot_pay_url, json=payload,
+                             timeout=ClientTimeout(total=20)) as resp:
+            data = await resp.json(content_type=None)
+            status = resp.status
+    except (ClientError, TimeoutError, ValueError):
+        log.exception("bot payment call failed for %s", tg_id)
+        return json_response({"error": "payments_unavailable"}, 502)
+    if status in (400, 403) and isinstance(data, dict) and data.get("error"):
+        return json_response({"error": str(data["error"])}, status)
+    pay_url = data.get("pay_url") if isinstance(data, dict) else None
+    if status != 200 or not isinstance(pay_url, str) or not pay_url.startswith("https://"):
+        log.error("bot payment call for %s returned %s", tg_id, status)
+        return json_response({"error": "payments_unavailable"}, 502)
+    log.info("tg %s payment %s for %s", tg_id, data.get("payment_id"), order["tag"])
+    return json_response({"pay_url": pay_url, "amount": order["amount"]})
 
 
 async def handle_health(request: web.Request) -> web.Response:
@@ -415,6 +478,7 @@ def create_app(cfg: Config) -> web.Application:
     app.on_cleanup.append(_on_cleanup)
     app.router.add_post("/api/me", handle_me)
     app.router.add_post("/api/devices/delete", handle_device_delete)
+    app.router.add_post("/api/pay", handle_pay)
     app.router.add_get("/api/health", handle_health)
     app.router.add_get("/{path:.*}", handle_static)
     return app

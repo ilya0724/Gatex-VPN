@@ -22,6 +22,9 @@
     if (isNaN(d)) return '';
     return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }).replace(/\s?г\.?$/, '');
   }
+  function money(n) {
+    return Math.round(n).toLocaleString('ru-RU').replace(/\s/g, '\u00a0') + '\u00a0₽';
+  }
   function fmtBytes(n) {
     n = Number(n) || 0;
     const gb = n / 1073741824;
@@ -166,7 +169,7 @@
   // ------------------------------------------------------------ demo data
   const DEMO_SCENARIOS = {
     fresh: { label: 'Новый пользователь, пробный период', days: 3, trial: true, used: 0, connected: false, onboard: true, devices: 0 },
-    active: { label: 'Активная подписка', days: 23, used: 18.6 * 1073741824, connected: true, devices: 2 },
+    active: { label: 'Активная подписка', days: 23, used: 18.6 * 1073741824, connected: true, devices: 2, tariff: { code: 'family', title: 'Семейный', bypass: true, devices: 7 } },
     expiring: { label: 'Заканчивается завтра, все места заняты', days: 1, used: 41.2 * 1073741824, limit: 50 * 1073741824, connected: true, devices: 3 },
     expired: { label: 'Подписка закончилась', days: -4, used: 7.3 * 1073741824, connected: true, status: 'expired', devices: 1 },
     none: { label: 'Нет подписки', status: 'none' }
@@ -176,6 +179,16 @@
     { id: 'd2', platform: 'Windows', os_version: '11', model: 'DESKTOP-K7Q2', app: 'Happ/1.9.0', seenMin: 3 * 1440, addedDays: 14 },
     { id: 'd3', platform: 'Android', os_version: '14', model: 'Redmi Note 12', app: 'Happ/3.5.0', seenMin: 26 * 1440, addedDays: 40 }
   ];
+  // same numbers as server/plans.py; the live page gets them from api/me
+  const DEMO_PLANS = {
+    months: [{ months: 1, discount: 0 }, { months: 3, discount: 10 }, { months: 6, discount: 15 }, { months: 12, discount: 25 }],
+    plans: [
+      { code: 'eco', title: 'Эконом', base_devices: 2, device_steps: [2, 4, 6, 8],
+        prices: { plain: { 1: 50, 3: 135, 6: 255, 12: 450 }, bypass: { 1: 100, 3: 270, 6: 510, 12: 900 } } },
+      { code: 'family', title: 'Семейный', base_devices: 7, device_steps: [7, 14, 21],
+        prices: { plain: { 1: 199, 3: 539, 6: 999, 12: 1790 }, bypass: { 1: 399, 3: 1079, 6: 1990, 12: 3590 } } }
+    ]
+  };
   function demoData(key) {
     const s = DEMO_SCENARIOS[key];
     const sub = s.status === 'none' ? { status: 'none' } : {
@@ -184,7 +197,7 @@
       is_trial: !!s.trial,
       used_bytes: s.used || 0,
       limit_bytes: s.limit || 0,
-      device_limit: 3,
+      device_limit: s.trial ? 2 : s.tariff ? s.tariff.devices : 3,
       online_at: s.connected ? new Date(Date.now() - 12 * 60000).toISOString() : null,
       first_connected_at: s.connected ? new Date(Date.now() - 20 * DAY).toISOString() : null,
       sub_url: 'https://app.fast-cloude-cdn.online/demo-7fK2pQ',
@@ -198,7 +211,10 @@
         added_at: new Date(Date.now() - d.addedDays * DAY).toISOString()
       })),
       links: { bot: 'https://t.me/gatexvpn_bot', buy: 'https://t.me/gatexvpn_bot', support: 'https://t.me/gatexvpn_bot', channel: 'https://t.me/gaatex_vpn', referral: 'https://t.me/gatexvpn_bot' },
-      price_from: null
+      price_from: null,
+      new_flow: true,
+      tariff: s.tariff || (s.trial ? { code: 'trial', title: 'Пробный', bypass: true, devices: 2 } : null),
+      plans: DEMO_PLANS
     };
   }
 
@@ -323,7 +339,8 @@
     else if (daysLeft !== null && daysLeft <= 3) { tone = 'warn'; badge = { cls: 'warn', text: 'осталось ' + daysLeft + ' ' + plural(daysLeft, ['день', 'дня', 'дней']) }; }
     else if (daysLeft !== null) { badge = { cls: 'ok', text: 'ещё ' + daysLeft + ' ' + plural(daysLeft, ['день', 'дня', 'дней']) }; }
     const active = tone !== 'off' && s.status !== 'limited';
-    return { s, exp, daysLeft, tone, title, badge, active, links: (d && d.links) || {}, price: d && d.price_from };
+    return { s, exp, daysLeft, tone, title, badge, active, links: (d && d.links) || {}, price: d && d.price_from,
+      newFlow: !!(d && d.new_flow && d.plans), tariff: (d && d.tariff) || null };
   }
 
   // ------------------------------------------------------------ screens
@@ -334,10 +351,11 @@
   function homeScreen() {
     const v = vm(), s = v.s;
     let sub = '';
-    if (s.status === 'none') sub = '<span>Оформите подписку в боте, и здесь появится всё для подключения</span>';
+    if (s.status === 'none') sub = '<span>' + (v.newFlow ? 'Выберите тариф, и здесь появится всё для подключения' : 'Оформите подписку в боте, и здесь появится всё для подключения') + '</span>';
     else if (v.exp) {
       const word = v.exp > Date.now() ? 'до ' : 'закончилась ';
-      sub = '<span class="num">' + word + esc(fmtDate(s.expire_at)) + '</span>' + (v.badge ? '<span class="pill ' + v.badge.cls + '">' + esc(v.badge.text) + '</span>' : '') + (s.is_trial ? '<span class="pill">пробный период</span>' : '');
+      sub = '<span class="num">' + word + esc(fmtDate(s.expire_at)) + '</span>' + (v.badge ? '<span class="pill ' + v.badge.cls + '">' + esc(v.badge.text) + '</span>' : '') + (s.is_trial ? '<span class="pill">пробный период</span>' : '') +
+        (v.tariff && v.tariff.code !== 'trial' ? '<span class="pill">' + esc(tariffName(v.tariff)) + '</span>' : '');
     }
 
     let html = header();
@@ -362,7 +380,10 @@
     }
 
     const price = v.price ? '<span class="spacer"></span><span class="aside">' + esc(v.price) + '</span>' : '';
-    if (s.status === 'none') {
+    if (v.newFlow) {
+      html += '<button class="btn white split" data-act="plans">' + ic('card') + '<span>Купить подписку</span><span class="spacer"></span><span class="aside">от ' + money(minPrice()) + '/мес</span></button>';
+      if (s.status !== 'none') html += '<button class="btn primary split" data-act="tab" data-tab="setup">' + ic('plug') + '<span>Установка и настройка</span><span class="spacer"></span>' + ic(PLATFORMS[state.platform].icon, 'sm') + '</button>';
+    } else if (s.status === 'none') {
       html += '<a class="btn primary split" href="' + esc(v.links.buy) + '" data-link>' + ic('gift') + '<span>Получить доступ</span>' + price + '</a>';
     } else {
       const buyLabel = v.active ? 'Продлить подписку' : 'Возобновить подписку';
@@ -484,7 +505,9 @@
     }
 
     html += '<h2 class="h-section">Аккаунт</h2><div class="list">' +
-      rowLink(v.links.buy, 'card', 'Продлить подписку', 'Оплата картой или звёздами в боте') +
+      (v.newFlow
+        ? '<button class="row" data-act="plans">' + rowInner('card', 'Купить подписку', v.tariff && v.tariff.code !== 'trial' ? 'Сейчас: ' + tariffName(v.tariff) + ', ' + devWord(v.tariff.devices) : 'Тарифы, устройства, оплата по СБП') + '</button>'
+        : rowLink(v.links.buy, 'card', 'Продлить подписку', 'Оплата картой или звёздами в боте')) +
       rowLink(v.links.referral, 'gift', 'Пригласить друга', 'Бонусы за приглашения в боте') +
       (v.links.channel ? rowLink(v.links.channel, 'megaphone', 'Канал GateX', 'Новости и статус серверов') : '') +
       '<button class="row" data-act="welcome">' + rowInner('book', 'Пройти обучение заново', 'Пошаговая настройка с начала') + '</button>' +
@@ -505,7 +528,10 @@
       ['Не подключается. Что сделать?',
         '<p>1. Проверьте на главной, что подписка активна.</p><p>2. В Happ <b>обновите подписку</b>: потяните список серверов вниз или нажмите значок обновления.</p><p>3. Выберите <b>другой сервер</b> и подключитесь снова.</p><p>4. Не помогло? Напишите в поддержку, приложите скриншот Happ.</p>'],
       ['Интернет работает только для «разрешённых» сайтов',
-        '<p>Так выглядят <b>белые списки</b>: ВК, Госуслуги и Яндекс открываются, остальное нет. Чаще всего это мобильный интернет.</p><p>Выберите в Happ сервер <span class="chip-server">🇵🇱 Обход БС</span>. Он работает через российский адрес, который оператор пропускает.</p><p>Если подписка не добавляется в Happ, используйте <b>резервную ссылку</b> из профиля.</p>'],
+        '<p>Так выглядят <b>белые списки</b>: ВК, Госуслуги и Яндекс открываются, остальное нет. Чаще всего это мобильный интернет.</p>' +
+        (noBypass()
+          ? '<p>В вашем тарифе нет обхода белых списков. Его можно включить: «Купить подписку», переключатель <b>«Обход белых списков»</b>.</p>'
+          : '<p>Выберите в Happ сервер <span class="chip-server">🇵🇱 Обход БС</span> или <span class="chip-server">LTE ОСНОВНАЯ</span>. Они работают через российский адрес, который оператор пропускает.</p><p>Если подписка не добавляется в Happ, используйте <b>резервную ссылку</b> из профиля.</p>')],
       ['Сколько устройств можно подключить?',
         limit ? '<p>До <b>' + esc(limit) + ' ' + plural(limit, ['устройства', 'устройств', 'устройств']) + '</b> на одну подписку. Подключить ещё одно: вкладка «Настройка», кнопка «Установить на другом устройстве».</p>'
           : '<p>Подключить ещё одно устройство можно во вкладке «Настройка», кнопка «Установить на другом устройстве». Лимит устройств зависит от тарифа.</p>'],
@@ -514,7 +540,9 @@
       ['Медленно или постоянно отваливается',
         '<p>Попробуйте сервер в другой стране: обычно быстрее всего Нидерланды и Франция. Если связь рвётся в метро или при смене Wi-Fi на мобильный, включите в Happ автоподключение.</p>'],
       ['Как продлить подписку?',
-        '<p>Нажмите «Продлить подписку» на главной. Оплата в боте картой российского банка или звёздами Telegram. Ссылку в Happ менять не нужно, она та же.</p>']
+        v.newFlow
+          ? '<p>Нажмите «Купить подписку» на главной, выберите тариф, число устройств и срок. Оплата по СБП или криптовалютой. Ссылку в Happ менять не нужно, она та же.</p>'
+          : '<p>Нажмите «Продлить подписку» на главной. Оплата в боте картой российского банка или звёздами Telegram. Ссылку в Happ менять не нужно, она та же.</p>']
     ];
     html += '<h2 class="h-section">Частые вопросы</h2><div class="faq">' +
       faq.map((f) => '<details><summary>' + esc(f[0]) + '<span class="chev">' + ic('chevR', 'sm') + '</span></summary><div class="a">' + f[1] + '</div></details>').join('') +
@@ -572,6 +600,176 @@
       }).join('') + '</div></div>';
   }
 
+  // ------------------------------------------------------------ tariffs
+  function catalog() { return (state.data && state.data.plans) || DEMO_PLANS; }
+  function planOf(code) { return catalog().plans.find((p) => p.code === code) || catalog().plans[0]; }
+  function planPrice(p, bypass, devices, months) {
+    return p.prices[bypass ? 'bypass' : 'plain'][months] * (devices / p.base_devices);
+  }
+  function minPrice() { return Math.min.apply(null, catalog().plans.map((p) => planPrice(p, false, p.base_devices, 1))); }
+  function devWord(n) { return n + ' ' + plural(n, ['устройство', 'устройства', 'устройств']); }
+  function monthWord(n) { return n + ' ' + plural(n, ['месяц', 'месяца', 'месяцев']); }
+  function tariffName(t) { return t.title + (t.code !== 'trial' && t.bypass ? ' + обход БС' : ''); }
+  function noBypass() { const t = vm().tariff; return !!(t && !t.bypass); }
+
+  function openPlans() {
+    const t = vm().tariff;
+    const cur = t && t.code !== 'trial' ? planOf(t.code) : null;
+    const p = cur || planOf('family');
+    state.sheet = {
+      kind: 'plans', stage: 'pick',
+      plan: p.code,
+      bypass: t ? !!t.bypass : true,
+      devices: cur && p.device_steps.indexOf(t.devices) >= 0 ? t.devices : p.base_devices,
+      months: 1, method: 'sbp', busy: false
+    };
+    renderSheet();
+  }
+
+  function plansSheet() {
+    const sh = state.sheet;
+    if (sh.stage === 'pay') return payStage(sh);
+    if (sh.stage === 'done') return paidStage();
+    const p = planOf(sh.plan);
+    const total = planPrice(p, sh.bypass, sh.devices, sh.months);
+    const full = planPrice(p, sh.bypass, sh.devices, 1) * sh.months;
+    const bypassExtra = planPrice(p, true, sh.devices, 1) - planPrice(p, false, sh.devices, 1);
+    const t = vm().tariff, s = vm().s;
+
+    let html = '<div class="sheet-top"><button class="iconbtn" aria-label="Закрыть" data-act="close">' + ic('chevL', 'sm') + '</button><span class="title">Покупка подписки</span><span style="width:40px"></span></div>' +
+      '<div class="step-body">' +
+      '<h1 class="h-display">Выберите тариф</h1>' +
+      '<p class="lead">Цена за весь срок, без автосписаний. Ссылка в Happ останется той же.</p>';
+
+    html += '<div class="plans" role="radiogroup" aria-label="Тариф">' + catalog().plans.map((pl) => {
+      const on = pl.code === sh.plan;
+      const blurb = pl.code === 'family' ? 'Для всей семьи: телефоны, ноутбуки, ТВ' : 'Телефон и компьютер';
+      return '<button class="plan" role="radio" aria-checked="' + on + '" data-act="plan-pick" data-plan="' + esc(pl.code) + '">' +
+        '<span class="ico">' + ic(pl.code === 'family' ? 'home' : 'phone') + '</span>' +
+        '<b>' + esc(pl.title) + '</b><span>' + esc(blurb) + '</span>' +
+        '<span class="plan-meta">' + devWord(pl.base_devices) + '</span>' +
+        '<span class="plan-price">' + money(planPrice(pl, sh.bypass, pl.base_devices, 1)) + '<small>/мес</small></span>' +
+        '<i class="radio" aria-hidden="true"></i></button>';
+    }).join('') + '</div>';
+
+    html += '<button class="switch-row" role="switch" aria-checked="' + sh.bypass + '" data-act="plan-bypass">' +
+      '<span class="ico">' + ic('signal') + '</span>' +
+      '<span class="txt"><b>Обход белых списков</b><span>Нужен, если мобильный интернет пускает только на «разрешённые» сайты. Добавляет серверы LTE ОСНОВНАЯ.</span></span>' +
+      '<span class="side"><span class="extra">+' + money(bypassExtra) + '/мес</span><i class="knob" aria-hidden="true"></i></span></button>';
+
+    html += '<h2 class="h-section">Сколько устройств</h2><div class="chips dev-chips" role="radiogroup" aria-label="Устройства">' + p.device_steps.map((n) =>
+      '<button class="chip" role="radio" aria-checked="' + (n === sh.devices) + '" data-act="plan-devices" data-n="' + n + '">' +
+      '<span class="dev-ico">' + ic(n > p.base_devices * 2 ? 'tv' : n > p.base_devices ? 'laptop' : 'phone', 'sm') + '</span>' +
+      '<b>' + n + '</b><span>' + plural(n, ['устройство', 'устройства', 'устройств']) + '</span>' +
+      '<em>' + money(planPrice(p, sh.bypass, n, 1)) + '/мес</em></button>').join('') + '</div>';
+
+    html += '<h2 class="h-section">Срок</h2><div class="chips" role="radiogroup" aria-label="Срок">' + catalog().months.map((m) => {
+      const price = planPrice(p, sh.bypass, sh.devices, m.months);
+      return '<button class="chip" role="radio" aria-checked="' + (m.months === sh.months) + '" data-act="plan-months" data-n="' + m.months + '">' +
+        (m.discount ? '<span class="save">−' + m.discount + '%</span>' : '') +
+        '<b>' + m.months + '</b><span>' + plural(m.months, ['месяц', 'месяца', 'месяцев']) + '</span>' +
+        '<em>' + (m.months > 1 ? '≈' + money(price / m.months) + '/мес' : money(price)) + '</em></button>';
+    }).join('') + '</div>';
+
+    let note = '';
+    if (t && t.code === sh.plan && !!t.bypass === sh.bypass && s.expire_at && vm().active) {
+      note = 'Дни добавятся к текущей подписке, она действует до ' + fmtDate(s.expire_at) + '.';
+    } else if (t && t.code !== 'trial' && vm().active) {
+      note = 'Это смена тарифа: новый срок начнётся с оплаты, а оставшиеся дни текущего тарифа пересчитаем по стоимости и добавим.';
+    }
+
+    html += '<div class="summary">' +
+      '<div class="sum-line"><span>' + esc(p.title) + (sh.bypass ? ' + обход БС' : '') + ' · ' + devWord(sh.devices) + ' · ' + monthWord(sh.months) + '</span></div>' +
+      '<div class="sum-total"><span>Итого</span><b>' + money(total) + '</b></div>' +
+      (full > total ? '<div class="sum-save">Экономия ' + money(full - total) + ' по сравнению с помесячной оплатой</div>' : '') +
+      '</div>' +
+      (note ? '<div class="hint">' + ic('info') + '<span>' + esc(note) + '</span></div>' : '');
+
+    html += '<h2 class="h-section">Способ оплаты</h2><div class="seg" role="radiogroup" aria-label="Способ оплаты">' +
+      [['sbp', 'СБП', 'в приложении банка'], ['crypto', 'Криптовалюта', 'USDT и другие']].map((m) =>
+        '<button role="radio" aria-checked="' + (sh.method === m[0]) + '" data-act="plan-method" data-m="' + m[0] + '"><b>' + m[1] + '</b><span>' + m[2] + '</span></button>').join('') +
+      '</div></div>';
+
+    html += '<div class="sheet-foot"><button class="btn white" data-act="plan-pay"' + (sh.busy ? ' disabled' : '') + '>' +
+      (sh.busy ? ic('refresh') + '<span>Создаём счёт…</span>' : ic('card') + '<span>Оплатить ' + money(total) + '</span>') + '</button></div>';
+    return html;
+  }
+
+  function payStage(sh) {
+    const pay = state.demo
+      ? '<button class="btn white" data-act="plan-demo-paid">' + ic('card') + '<span>Перейти к оплате</span></button>'
+      : '<a class="btn white" href="' + esc(sh.payUrl) + '" data-link data-paylink>' + ic('card') + '<span>Перейти к оплате</span></a>';
+    return '<div class="sheet-top"><button class="iconbtn" aria-label="Назад" data-act="back">' + ic('chevL', 'sm') + '</button><span class="title">Оплата</span><span style="width:40px"></span></div>' +
+      '<div class="step-body enter"><div class="step-art">' + ic('card') + '</div>' +
+      '<h1 class="h-display">Счёт на ' + money(sh.amount) + ' готов</h1>' +
+      '<p class="lead">Нажмите кнопку, откроется страница оплаты' + (sh.method === 'sbp' ? ' по СБП' : '') + '. После оплаты вернитесь сюда: подписка обновится сама.</p>' +
+      '<ol class="orderlist"><li><span>Нажмите <b>«Перейти к оплате»</b>.</span></li><li><span>' + (sh.method === 'sbp' ? 'Выберите свой банк или отсканируйте QR-код и подтвердите платёж.' : 'Выберите монету и переведите сумму по реквизитам на странице.') + '</span></li><li><span>Вернитесь в кабинет и нажмите <b>«Я оплатил»</b>, если подписка не обновилась сама.</span></li></ol>' +
+      '</div><div class="sheet-foot">' + pay +
+      '<button class="btn ghost small" data-act="plan-check"' + (sh.busy ? ' disabled' : '') + '>' + (sh.busy ? 'Проверяем…' : 'Я оплатил, проверить') + '</button>' +
+      '<button class="linkish" data-act="back">Изменить тариф</button></div>';
+  }
+
+  function paidStage() {
+    const v = vm();
+    return '<div class="sheet-top"><span style="width:40px"></span><span class="title"></span><button class="iconbtn" aria-label="Закрыть" data-act="close">' + ic('close', 'sm') + '</button></div>' +
+      '<div class="step-body enter"><div class="welcome-art"><div class="gate" data-tone="ok"><i class="ring r1"></i><i class="ring r2"></i><i class="ring r3"></i><div class="core">' + ic('check') + '</div></div></div>' +
+      '<h1 class="h-display" style="text-align:center">Оплата прошла</h1>' +
+      '<p class="lead" style="text-align:center">' + (v.tariff ? esc(tariffName(v.tariff)) + ', ' + devWord(v.tariff.devices) + '. ' : '') + (v.s.expire_at ? 'Подписка действует до ' + esc(fmtDate(v.s.expire_at)) + '.' : '') + '</p>' +
+      '<div class="hint">' + ic('refresh') + '<span>Если Happ уже настроен, <b>обновите подписку</b> в нём, чтобы подтянулись серверы тарифа.</span></div>' +
+      '</div><div class="sheet-foot"><button class="btn primary" data-act="close">Готово</button>' +
+      (v.s.first_connected_at ? '' : '<button class="btn ghost small" data-act="setup-here">Настроить подключение</button>') + '</div>';
+  }
+
+  function subSnapshot() {
+    const d = state.data || {};
+    const s = d.subscription || {};
+    return [s.status, s.expire_at, d.tariff && d.tariff.code, d.tariff && d.tariff.bypass, s.device_limit].join('|');
+  }
+
+  async function createPayment() {
+    const sh = state.sheet;
+    if (!sh || sh.busy) return;
+    haptic('medium');
+    if (state.demo) {
+      sh.stage = 'pay'; sh.amount = planPrice(planOf(sh.plan), sh.bypass, sh.devices, sh.months); renderSheet(); return;
+    }
+    sh.busy = true; renderSheet();
+    try {
+      const res = await fetch(new URL('api/pay', location.href), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: state.tg.initData, plan: sh.plan, bypass: sh.bypass, devices: sh.devices, months: sh.months, method: sh.method })
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body.pay_url) throw new Error(body.error || String(res.status));
+      sh.before = subSnapshot();
+      sh.payUrl = body.pay_url; sh.amount = body.amount; sh.stage = 'pay';
+      haptic('ok');
+    } catch (e) {
+      toast(e.message === 'old_tariff' ? 'Ваш тариф продлевается в боте, кнопка «Купить»'
+        : e.message === 'unauthorized' ? 'Сессия устарела. Откройте кабинет из бота заново'
+          : 'Не получилось создать счёт. Попробуйте ещё раз или напишите в поддержку');
+    }
+    sh.busy = false;
+    if (state.sheet === sh) renderSheet();
+  }
+
+  async function checkPayment(quiet) {
+    const sh = state.sheet;
+    if (!sh || sh.kind !== 'plans' || sh.stage !== 'pay' || sh.busy) return;
+    if (state.demo) return;
+    sh.busy = true; if (!quiet) renderSheet();
+    try {
+      state.data = await fetchMe(true);
+      if (subSnapshot() !== sh.before) { sh.stage = 'done'; haptic('ok'); render(); }
+      else if (!quiet) toast('Оплата ещё не дошла. Подождите минуту и проверьте снова');
+    } catch (e) {
+      if (!quiet) toast('Не получилось проверить. Попробуйте ещё раз');
+    }
+    sh.busy = false;
+    if (state.sheet === sh) renderSheet();
+  }
+
   function wizardSheet() {
     const w = state.sheet;
     const p = PLATFORMS[w.platform];
@@ -591,8 +789,10 @@
       foot = '<button class="btn primary" data-act="next">Happ установлен, дальше</button>';
     } else if (w.step === 1) {
       if (s.status === 'none' || !s.sub_url) {
-        body = '<span class="step-kicker">Шаг 2 из 3</span><h1 class="h-display">Нужна подписка</h1><p class="lead">Чтобы добавить VPN в Happ, сначала оформите подписку или пробный период в боте. Потом вернитесь сюда, мы продолжим с этого шага.</p>';
-        foot = '<a class="btn primary" href="' + esc(vm().links.buy) + '" data-link>' + ic('gift') + '<span>Оформить в боте</span></a>';
+        body = '<span class="step-kicker">Шаг 2 из 3</span><h1 class="h-display">Нужна подписка</h1><p class="lead">Чтобы добавить VPN в Happ, сначала оформите подписку' + (vm().newFlow ? '' : ' или пробный период в боте') + '. Потом вернитесь сюда, мы продолжим с этого шага.</p>';
+        foot = vm().newFlow
+          ? '<button class="btn white" data-act="plans">' + ic('card') + '<span>Выбрать тариф</span></button>'
+          : '<a class="btn primary" href="' + esc(vm().links.buy) + '" data-link>' + ic('gift') + '<span>Оформить в боте</span></a>';
       } else if (!w.remote) {
         body = '<span class="step-kicker">Шаг 2 из 3</span><h1 class="h-display">Добавьте подписку</h1>' +
           '<p class="lead">Нажмите кнопку: откроется Happ, и все серверы GateX появятся в нём сами.</p>' +
@@ -618,7 +818,9 @@
       body = '<span class="step-kicker">Шаг 3 из 3</span><h1 class="h-display">Включите VPN</h1>' +
         '<div class="step-art">' + ic('power') + '</div>' +
         '<ol class="orderlist"><li><span>Откройте <b>Happ</b>.</span></li><li><span>Нажмите <b>большую кнопку</b> в центре экрана. Сервер выбирается автоматически.</span></li><li><span>' + esc(p.allow) + '</span></li></ol>' +
-        '<div class="hint warn">' + ic('signal') + '<span>Мобильный интернет пускает только на «разрешённые» сайты? Выберите в списке серверов <span class="chip-server">🇵🇱 Обход БС</span>.</span></div>';
+        (noBypass()
+          ? '<div class="hint">' + ic('signal') + '<span>Мобильный интернет пускает только на «разрешённые» сайты? Это белые списки. Обход можно добавить к тарифу: «Купить подписку», переключатель «Обход белых списков».</span></div>'
+          : '<div class="hint warn">' + ic('signal') + '<span>Мобильный интернет пускает только на «разрешённые» сайты? Выберите в списке серверов <span class="chip-server">🇵🇱 Обход БС</span>.</span></div>');
       foot = '<button class="btn primary" data-act="next">Подключилось</button><button class="btn ghost small" data-act="tab-help">Не получается</button>';
     } else {
       body = '<div class="welcome-art"><div class="gate" data-tone="ok"><i class="ring r1"></i><i class="ring r2"></i><i class="ring r3"></i><div class="core">' + ic('check') + '</div></div></div>' +
@@ -661,8 +863,8 @@
       sheet.setAttribute('role', 'dialog'); sheet.setAttribute('aria-modal', 'true');
       document.body.appendChild(sheet);
     }
-    const key = sh.kind + (sh.step || 0) + (sh.platform || '');
-    const html = sh.kind === 'welcome' ? welcomeSheet() : sh.kind === 'devices' ? devicesSheet() : wizardSheet();
+    const key = sh.kind + (sh.step || 0) + (sh.platform || '') + (sh.stage || '');
+    const html = sh.kind === 'welcome' ? welcomeSheet() : sh.kind === 'devices' ? devicesSheet() : sh.kind === 'plans' ? plansSheet() : wizardSheet();
     sheet.innerHTML = '<div class="sheet-inner">' + html + '</div>';
     if (key !== lastSheetKey) sheet.scrollTop = 0;
     lastSheetKey = key;
@@ -704,6 +906,7 @@
     const sh = state.sheet;
     if (!sh) return;
     if (sh.kind === 'wizard' && sh.step > 0 && sh.step < 3) { sh.step--; renderSheet(); return; }
+    if (sh.kind === 'plans' && sh.stage === 'pay') { sh.stage = 'pick'; renderSheet(); return; }
     if (sh.kind === 'welcome') finishOnboarding();
     state.sheet = sh.prev || null;
     if (state.sheet && state.sheet.kind === 'wizard') state.sheet = null;
@@ -765,6 +968,32 @@
         state.confirmDevice = null; render(); break;
       case 'device-delete':
         deleteDevice(t.dataset.id); break;
+      case 'plans':
+        haptic('light'); openPlans(); break;
+      case 'plan-pick': {
+        const p = planOf(t.dataset.plan);
+        if (state.sheet.plan !== p.code) { state.sheet.plan = p.code; state.sheet.devices = p.base_devices; }
+        haptic('light'); renderSheet(); break;
+      }
+      case 'plan-bypass':
+        state.sheet.bypass = !state.sheet.bypass; haptic('light'); renderSheet(); break;
+      case 'plan-devices':
+        state.sheet.devices = Number(t.dataset.n); haptic('light'); renderSheet(); break;
+      case 'plan-months':
+        state.sheet.months = Number(t.dataset.n); haptic('light'); renderSheet(); break;
+      case 'plan-method':
+        state.sheet.method = t.dataset.m; haptic('light'); renderSheet(); break;
+      case 'plan-pay':
+        createPayment(); break;
+      case 'plan-check':
+        checkPayment(false); break;
+      case 'plan-demo-paid': {
+        const sh = state.sheet, p = planOf(sh.plan);
+        state.data.tariff = { code: p.code, title: p.title, bypass: sh.bypass, devices: sh.devices };
+        state.data.subscription = Object.assign({}, state.data.subscription, { status: 'active', is_trial: false, device_limit: sh.devices,
+          expire_at: new Date(Date.now() + sh.months * 30 * DAY).toISOString() });
+        sh.stage = 'done'; haptic('ok'); render(); break;
+      }
       case 'retry':
         state.error = null; state.data = null; render(); boot(); break;
       case 'demo-start':
@@ -808,11 +1037,11 @@
     render();
   }
 
-  async function fetchMe() {
+  async function fetchMe(fresh) {
     const res = await fetch(new URL('api/me', location.href), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ initData: state.tg.initData })
+      body: JSON.stringify({ initData: state.tg.initData, fresh: !!fresh })
     });
     if (res.status === 401) throw new Error('unauthorized');
     if (!res.ok) throw new Error('server');
@@ -832,6 +1061,9 @@
       const onboarded = store('gx_onboarded') === '1' || cloudFlag === '1';
       if (!onboarded && (s.status === 'active' || s.status === 'none') && !s.first_connected_at) state.sheet = { kind: 'welcome' };
       render();
+      // the bot's «Купить» button opens the cabinet with ?open=buy (or startapp=buy)
+      const startParam = (state.tg.initDataUnsafe && state.tg.initDataUnsafe.start_param) || new URLSearchParams(location.search).get('open');
+      if (startParam === 'buy' && vm().newFlow) openPlans();
     } catch (e) {
       state.error = e.message === 'unauthorized' ? 'unauthorized' : 'server';
       render();
@@ -844,6 +1076,7 @@
       try { state.tg.ready(); state.tg.expand(); } catch (e) { /* ignore */ }
       state.tg.onEvent && state.tg.onEvent('themeChanged', applyTheme);
       state.tg.BackButton && state.tg.BackButton.onClick(goBack);
+      state.tg.onEvent && state.tg.onEvent('activated', () => checkPayment(true));
     }
     applyTheme();
     const saved = store('gx_platform');
@@ -851,6 +1084,8 @@
     render();
     boot();
   }
+
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkPayment(true); });
 
   init();
 })();
