@@ -50,6 +50,8 @@ class Config:
     trial_tag: str = plans.TRIAL["tag"]
     bot_pay_url: str = ""
     bot_me_url: str = ""
+    bot_revoke_url: str = ""
+    revoke_keys_on_delete: bool = True
     referral_bonus_percent: int = 25
     web_dir: Path = field(default=WEB_DIR)
 
@@ -75,6 +77,8 @@ class Config:
             trial_tag=get("TRIAL_TAG") or plans.TRIAL["tag"],
             bot_pay_url=get("BOT_PAY_URL"),
             bot_me_url=get("BOT_ME_URL"),
+            bot_revoke_url=get("BOT_REVOKE_URL"),
+            revoke_keys_on_delete=get("REVOKE_KEYS_ON_DELETE", "1").lower() not in ("0", "false", "no"),
             referral_bonus_percent=int(get("REFERRAL_BONUS_PERCENT", "25") or 25),
             web_dir=Path(get("WEB_DIR") or WEB_DIR),
         )
@@ -193,6 +197,15 @@ class Remnawave:
         body = {"userId": user_key} if isinstance(user_key, int) else {"userUuid": user_key}
         body["hwid"] = hwid
         async with self.session.post(url, headers=self._headers(), json=body) as r:
+            r.raise_for_status()
+
+    async def revoke_passwords(self, user_key) -> None:
+        """New VLESS/Trojan secrets, same subscription link: configs already
+        copied off a removed device stop working, the rest pick up the new
+        keys on their next subscription refresh."""
+        url = f"{self.cfg.rw_api_base}/users/{user_key}/actions/revoke"
+        async with self.session.post(url, headers=self._headers(),
+                                     json={"revokeOnlyPasswords": True}) as r:
             r.raise_for_status()
 
 
@@ -374,7 +387,26 @@ async def handle_me(request: web.Request) -> web.Response:
     })
 
 
+async def _bot_revoke_hwid(request: web.Request, init_data: str, hwid: str) -> bool:
+    """Ask the bot to blacklist the HWID, so the subscription proxy stops
+    serving it and the panel never sees it again. True when nothing to do."""
+    cfg: Config = request.app["cfg"]
+    if not cfg.bot_revoke_url:
+        return True
+    http: ClientSession = request.app["http"]
+    try:
+        async with http.post(cfg.bot_revoke_url, json={"initData": init_data, "hwid": hwid},
+                             timeout=ClientTimeout(total=10)) as resp:
+            return resp.status == 200
+    except (ClientError, TimeoutError):
+        return False
+
+
 async def handle_device_delete(request: web.Request) -> web.Response:
+    """Remove a device for good: blacklisted in the bot (the subscription
+    proxy then refuses it), dropped from the panel, and, unless turned off,
+    the user's keys rotated so configs it already holds stop working."""
+    cfg: Config = request.app["cfg"]
     init, body = await _auth(request)
     if not init:
         return json_response({"error": "unauthorized"}, 401)
@@ -387,13 +419,24 @@ async def handle_device_delete(request: web.Request) -> web.Response:
                       if device_id(str(d["hwid"])) == target), None)
         if entry["key"] is None or not match:
             return json_response({"error": "not_found"}, 404)
-        await rw.delete_hwid_device(entry["key"], str(match["hwid"]))
-        log.info("tg %s removed device %s", tg_id, target)
+        hwid = str(match["hwid"])
+        if not await _bot_revoke_hwid(request, body["initData"], hwid):
+            log.error("bot revoke failed for tg %s device %s", tg_id, target)
+            return json_response({"error": "revoke_unavailable"}, 502)
+        await rw.delete_hwid_device(entry["key"], hwid)
+        keys_rotated = False
+        if cfg.revoke_keys_on_delete:
+            try:
+                await rw.revoke_passwords(entry["key"])
+                keys_rotated = True
+            except Exception:
+                log.exception("key rotation failed for %s", tg_id)
+        log.info("tg %s removed device %s (keys rotated: %s)", tg_id, target, keys_rotated)
         entry = await _load(request, tg_id, fresh=True)
     except Exception:
         log.exception("device delete failed for %s", tg_id)
         return json_response({"error": "panel_unavailable"}, 502)
-    return json_response({"devices": entry["devices"]})
+    return json_response({"devices": entry["devices"], "keys_rotated": keys_rotated})
 
 
 async def handle_pay(request: web.Request) -> web.Response:

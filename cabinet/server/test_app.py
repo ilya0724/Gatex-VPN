@@ -78,6 +78,7 @@ def test_normalize_new_and_old_shapes():
 class FakeRW:
     def __init__(self, users, devices):
         self.users, self.devices, self.calls, self.deleted = users, devices, 0, []
+        self.revoked = []
 
     async def users_by_telegram_id(self, tg_id):
         self.calls += 1
@@ -90,6 +91,9 @@ class FakeRW:
     async def delete_hwid_device(self, user_uuid, hwid):
         self.deleted.append((user_uuid, hwid))
         self.devices = [d for d in self.devices if d["hwid"] != hwid]
+
+    async def revoke_passwords(self, user_uuid):
+        self.revoked.append(user_uuid)
 
 
 DEVICES = [
@@ -135,6 +139,7 @@ async def test_device_delete(client):
     assert r.status == 200
     assert [d["platform"] for d in (await r.json())["devices"]] == ["iOS"]
     assert client.fake.deleted == [("uuid-1", "hw-old")]
+    assert client.fake.revoked == ["uuid-1"]  # copied configs stop working
 
     r = await client.post("/api/devices/delete", json={"initData": init_data(), "id": "nope"})
     assert r.status == 404
@@ -173,10 +178,15 @@ async def test_remnawave_3x_fallbacks(aiohttp_client):
         seen["delete"] = await request.json()
         return aweb.json_response({"response": {}})
 
+    async def revoke(request):
+        seen["revoke"] = (request.match_info["key"], await request.json())
+        return aweb.json_response({"response": {}})
+
     panel = aweb.Application()
     panel.router.add_get("/api/users", list_users)
     panel.router.add_get("/api/hwid/devices/{key}", devices)
     panel.router.add_post("/api/hwid/devices/delete", delete)
+    panel.router.add_post("/api/users/{key}/actions/revoke", revoke)
     srv = await aiohttp_client(panel)
 
     async with ClientSession() as session:
@@ -188,6 +198,8 @@ async def test_remnawave_3x_fallbacks(aiohttp_client):
         assert (await rw.hwid_devices(key))[0]["hwid"] == "hw-1"
         await rw.delete_hwid_device(key, "hw-1")
         assert seen["delete"] == {"userId": 2, "hwid": "hw-1"}
+        await rw.revoke_passwords(key)
+        assert seen["revoke"] == ("2", {"revokeOnlyPasswords": True})
         assert await rw.users_by_telegram_id(9999) == []
 
 
@@ -278,5 +290,48 @@ async def test_referral_link_with_and_without_the_bot(aiohttp_client, aiohttp_se
             assert r.status == 200
             assert await r.json() == {"link": "https://t.me/gatexvpn_bot?start=ref42", "count": count, "bonus_percent": 25}
             assert (await c.post("/api/referral", json={"initData": "bad"})).status == 401
+    finally:
+        await session.close()
+
+
+async def test_device_delete_blacklists_in_the_bot_first(aiohttp_client, aiohttp_server, tmp_path):
+    from aiohttp import ClientSession, web as aweb
+
+    seen, state = [], {"status": 200}
+
+    async def bot_revoke(request):
+        seen.append(await request.json())
+        return aweb.json_response({"ok": True}, status=state["status"])
+
+    bot = aweb.Application()
+    bot.router.add_post("/api/devices/revoke-hwid", bot_revoke)
+    bot_server = await aiohttp_server(bot)
+
+    application = cabinet.create_app(cfg(web_dir=tmp_path,
+                                         bot_revoke_url=str(bot_server.make_url("/api/devices/revoke-hwid"))))
+    application.on_startup.clear()
+    application.on_cleanup.clear()
+    fake = FakeRW([{"uuid": "uuid-1", "status": "ACTIVE", "expireAt": "2099-01-01T00:00:00Z",
+                    "shortUuid": "s1"}], DEVICES)
+    application["rw"] = fake
+    session = ClientSession()
+    application["http"] = session
+    c = await aiohttp_client(application)
+    try:
+        me = await (await c.post("/api/me", json={"initData": init_data()})).json()
+        ids = {d["platform"]: d["id"] for d in me["devices"]}
+
+        # bot down: nothing is deleted, so the device can't sneak back
+        state["status"] = 500
+        r = await c.post("/api/devices/delete", json={"initData": init_data(), "id": ids["Windows"]})
+        assert r.status == 502
+        assert fake.deleted == [] and fake.revoked == []
+
+        state["status"] = 200
+        r = await c.post("/api/devices/delete", json={"initData": init_data(), "id": ids["Windows"]})
+        assert r.status == 200
+        assert (await r.json())["keys_rotated"] is True
+        assert seen[-1]["hwid"] == "hw-old" and seen[-1]["initData"]
+        assert fake.deleted == [("uuid-1", "hw-old")] and fake.revoked == ["uuid-1"]
     finally:
         await session.close()

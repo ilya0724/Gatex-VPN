@@ -457,12 +457,13 @@
         '<span class="ico">' + ic(k.icon) + '</span>' +
         '<span class="txt"><b>' + esc(title) + '</b><span>' + esc(meta) + '</span>' + (seen ? '<span>Активность: ' + esc(seen) + '</span>' : '') + '</span>' +
         (confirming
-          ? '<span class="confirm"><button class="btn small danger" data-act="device-delete" data-id="' + esc(d.id) + '"' + (state.busy ? ' disabled' : '') + '>' + (state.busy ? 'Отвязываем…' : 'Отвязать') + '</button><button class="btn small ghost" data-act="device-cancel">Нет</button></span>'
-          : '<button class="iconbtn" aria-label="Отвязать ' + esc(title) + '" data-act="device-ask" data-id="' + esc(d.id) + '">' + ic('close', 'sm') + '</button>') +
+          ? '<span class="confirm-note">Удалить навсегда? VPN на нём отключится сразу и подключить его снова не получится. На остальных устройствах после этого обновите подписку в Happ.</span>' +
+            '<span class="confirm"><button class="btn small danger" data-act="device-delete" data-id="' + esc(d.id) + '"' + (state.busy ? ' disabled' : '') + '>' + (state.busy ? 'Удаляем…' : 'Удалить') + '</button><button class="btn small ghost" data-act="device-cancel">Нет</button></span>'
+          : '<button class="iconbtn" aria-label="Удалить ' + esc(title) + '" data-act="device-ask" data-id="' + esc(d.id) + '">' + ic('close', 'sm') + '</button>') +
         '</div>';
     });
-    html += '<button class="row" data-act="devices" data-remote="1">' + rowInner('qr', 'Подключить ещё устройство', limit && list.length >= limit ? 'Сначала отвяжите одно из старых' : 'Инструкция и QR-код') + '</button></div>';
-    html += '<p class="muted" style="margin:-4px 4px 0;font-size:13px">Отвяжите устройство, которым больше не пользуетесь: место освободится для нового. На отвязанном устройстве VPN перестанет работать, пока его не подключат снова.</p>';
+    html += '<button class="row" data-act="devices" data-remote="1">' + rowInner('qr', 'Подключить ещё устройство', limit && list.length >= limit ? 'Сначала удалите одно из старых' : 'Инструкция и QR-код') + '</button></div>';
+    html += '<p class="muted" style="margin:-4px 4px 0;font-size:13px">Удалите устройство, которым больше не пользуетесь: место освободится для нового. Удалённое устройство отключается навсегда, а остальным нужно обновить подписку в Happ.</p>';
     return html;
   }
 
@@ -1052,9 +1053,9 @@
         if (!res.ok) throw new Error(String(res.status));
         state.data.devices = (await res.json()).devices;
       }
-      haptic('ok'); toast('Устройство отвязано');
+      haptic('ok'); toast('Устройство удалено. Обновите подписку в Happ на остальных устройствах');
     } catch (e) {
-      toast('Не получилось отвязать. Попробуйте ещё раз');
+      toast('Не получилось удалить. Попробуйте ещё раз');
     }
     state.busy = false; state.confirmDevice = null; render();
   }
