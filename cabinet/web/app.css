@@ -39,7 +39,7 @@
 }
 
 @media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
+  :root:not([data-theme]) {
     --bg: #edf4f0; --bg-2: #e2eee8; --glow: rgba(15, 168, 116, 0.14);
     --surface: rgba(255, 255, 255, 0.6); --surface-2: rgba(255, 255, 255, 0.7); --line: rgba(8, 40, 28, 0.08);
     --glass: linear-gradient(160deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.5) 60%);
@@ -53,6 +53,15 @@
     --shadow: 0 10px 30px rgba(10, 50, 35, 0.12);
     color-scheme: light;
   }
+}
+/* black: true black for OLED phones, same mint accent */
+:root[data-theme="black"] {
+  --bg: #000000; --bg-2: #050806; --glow: rgba(46, 230, 166, 0.10);
+  --surface: rgba(255, 255, 255, 0.05); --surface-2: rgba(255, 255, 255, 0.08); --line: rgba(255, 255, 255, 0.09);
+  --text: #f2f5f4; --muted: #8f9a96;
+  --orb-1: rgba(46, 230, 166, 0.10); --orb-2: rgba(40, 140, 255, 0.06);
+  --nav-bg: rgba(10, 12, 11, 0.8);
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
 }
 :root[data-theme="light"] {
   --bg: #edf4f0; --bg-2: #e2eee8; --glow: rgba(15, 168, 116, 0.14);
@@ -398,3 +407,52 @@ body.has-sheet .demo-bar { display: none; }
 .ref-head .brand-mark { width: 40px; height: 40px; border-radius: 12px; flex: none; }
 .ref-head b { display: block; font-size: 15.5px; }
 .ref-head span span { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+/* ---------- full screen: Telegram's own buttons float over the top edge */
+.app { padding-top: calc(12px + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)); }
+.nav { padding-bottom: calc(10px + max(env(safe-area-inset-bottom, 0px), var(--tg-safe-area-inset-bottom, 0px))); }
+.demo-bar { top: calc(10px + env(safe-area-inset-top, 0px) + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)); }
+.sheet-inner { padding-top: calc(10px + env(safe-area-inset-top, 0px) + var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px)); }
+.splash .gx-g { transform-box: fill-box; }
+
+/* ---------- theme picker */
+.seg.three { grid-template-columns: repeat(3, 1fr); }
+.seg.three button { align-items: center; gap: 8px; padding: 12px 8px; }
+.swatch { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.06); }
+.swatch.light { background: linear-gradient(135deg, #ffffff, #e2eee8); }
+.swatch.black { background: linear-gradient(135deg, #1a1d1c, #000000); }
+.swatch.green { background: linear-gradient(135deg, #12402f, #06110e); }
+.swatch::after { content: ""; display: block; width: 10px; height: 10px; margin: 11px auto 0; border-radius: 50%; background: #2ee6a6; }
+.swatch.light::after { background: #0fa874; }
+
+/* ---------- launch animation */
+.splash { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+  background: radial-gradient(120% 60% at 50% -10%, var(--glow), transparent 70%), linear-gradient(180deg, var(--bg-2), var(--bg) 55%); background-color: var(--bg);
+  color: var(--accent); transition: opacity 0.4s ease, transform 0.4s ease; }
+.splash.out { opacity: 0; transform: scale(1.04); pointer-events: none; }
+.splash-art { position: relative; width: min(240px, 64vw); aspect-ratio: 1; display: grid; place-items: center; }
+.splash-art .ring { position: absolute; border-radius: 50%; border: 1px solid var(--accent); opacity: 0; }
+.splash-art .ring.r1 { inset: 0; }
+.splash-art .ring.r2 { inset: 14%; }
+.splash-art .ring.r3 { inset: 28%; }
+.splash-art .gx { width: 52%; }
+.splash-word { font: 600 22px/1 var(--font-display); letter-spacing: -0.01em; color: var(--text); opacity: 0; }
+.splash-word b { color: var(--accent); }
+@media (prefers-reduced-motion: no-preference) {
+  .splash-art .ring { animation: splash-ring 1.1s cubic-bezier(.2, .7, .2, 1) forwards; }
+  .splash-art .ring.r2 { animation-delay: 0.12s; }
+  .splash-art .ring.r3 { animation-delay: 0.24s; }
+  .splash .gx-g { animation: splash-g 0.7s 0.15s cubic-bezier(.2, .7, .2, 1) both; }
+  .splash .gx-x { animation: splash-x 0.9s 0.3s cubic-bezier(.5, -0.3, .3, 1.35) both; }
+  .splash-word { animation: splash-word 0.6s 0.6s ease forwards; }
+  body.entered .app { animation: app-in 0.45s ease both; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .splash-art .ring { opacity: 0.25; }
+  .splash-word { opacity: 1; }
+}
+@keyframes splash-ring { from { transform: scale(0.5); opacity: 0; } 60% { opacity: 0.35; } to { transform: scale(1); opacity: 0.22; } }
+@keyframes splash-g { from { opacity: 0; transform: translateX(-14%); } to { opacity: 1; transform: none; } }
+@keyframes splash-x { from { opacity: 0; transform: rotate(-180deg) scale(0.4); } to { opacity: 1; transform: none; } }
+@keyframes splash-word { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes app-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }

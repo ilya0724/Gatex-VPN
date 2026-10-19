@@ -254,9 +254,16 @@
       else h.impactOccurred(kind || 'light');
     } catch (e) { /* old client */ }
   }
+  // White, black or green; until the person picks one, follow Telegram (light → white, dark → green).
+  const THEMES = [['light', 'Белая'], ['black', 'Чёрная'], ['green', 'Зелёная']];
+  function themeChoice() {
+    const t = state.theme || store('gx_theme');
+    return THEMES.some(([k]) => k === t) ? t : null;
+  }
   function applyTheme() {
     const tg = state.tg;
-    if (tg && tg.colorScheme) document.documentElement.setAttribute('data-theme', tg.colorScheme);
+    const auto = (tg && tg.colorScheme === 'light') || (!tg && window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'green';
+    document.documentElement.setAttribute('data-theme', themeChoice() || auto);
     if (tg) {
       const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
       try { tg.setHeaderColor(bg); tg.setBackgroundColor(bg); if (tg.setBottomBarColor) tg.setBottomBarColor(bg); } catch (e) { /* old client */ }
@@ -274,6 +281,21 @@
     if (!cs || !state.tg.isVersionAtLeast || !state.tg.isVersionAtLeast('6.9')) return;
     try { cs.setItem(key, val); } catch (e) { /* ignore */ }
   }
+  function setTheme(t) {
+    state.theme = t;
+    store('gx_theme', t);
+    cloudSet('gx_theme', t);
+    applyTheme();
+    haptic('light');
+    render();
+  }
+  function themeBlock() {
+    const cur = document.documentElement.getAttribute('data-theme');
+    return '<h2 class="h-section">Оформление</h2><div class="seg three" role="radiogroup" aria-label="Тема">' +
+      THEMES.map(([k, label]) => '<button role="radio" aria-checked="' + (cur === k) + '" data-act="theme" data-theme="' + k + '">' +
+        '<i class="swatch ' + k + '"></i><b>' + label + '</b></button>').join('') + '</div>';
+  }
+
   function syncBackButton() {
     const bb = state.tg && state.tg.BackButton;
     if (!bb) return;
@@ -355,7 +377,7 @@
     if (s.status === 'none') sub = '<span>' + (v.newFlow ? 'Выберите тариф, и здесь появится всё для подключения' : 'Оформите подписку в боте, и здесь появится всё для подключения') + '</span>';
     else if (v.exp) {
       const word = v.exp > Date.now() ? 'до ' : 'закончилась ';
-      sub = '<span class="num">' + word + esc(fmtDate(s.expire_at)) + '</span>' + (v.badge ? '<span class="pill ' + v.badge.cls + '">' + esc(v.badge.text) + '</span>' : '') + (s.is_trial ? '<span class="pill">пробный период</span>' : '');
+      sub = '<span class="num">' + word + esc(fmtDate(s.expire_at)) + '</span>' + (v.badge ? '<span class="pill ' + v.badge.cls + '">' + esc(v.badge.text) + '</span>' : '');
     }
 
     let html = header();
@@ -524,6 +546,8 @@
     }
 
     html += referralBlock();
+
+    html += themeBlock();
 
     html += '<h2 class="h-section">Аккаунт</h2><div class="list">' +
       (v.newFlow
@@ -889,8 +913,9 @@
   // ------------------------------------------------------------ render
   function render() {
     const el = root();
-    if (state.error) { el.innerHTML = errorScreen(); return; }
+    if (state.error) { el.innerHTML = errorScreen(); hideSplash(); return; }
     if (!state.data) { el.innerHTML = loadingScreen(); return; }
+    hideSplash();
     const screens = { home: homeScreen, setup: setupScreen, profile: profileScreen, help: helpScreen };
     el.innerHTML = '<main class="app">' + screens[state.tab]() + '</main>' + navBar() + demoBar();
     renderSheet();
@@ -1012,6 +1037,8 @@
         state.confirmDevice = null; render(); break;
       case 'device-delete':
         deleteDevice(t.dataset.id); break;
+      case 'theme':
+        setTheme(t.dataset.theme); break;
       case 'device-restore':
         restoreDevice(t.dataset.id); break;
       case 'plans':
@@ -1176,14 +1203,42 @@
     }
   }
 
+  // Launch screen: rings open, G slides in, X turns into place; stays at
+  // least SPLASH_MS so the animation plays even when data comes back fast.
+  const SPLASH_MS = 1300;
+  let splashAt = 0;
+  function showSplash() {
+    splashAt = Date.now();
+    document.body.insertAdjacentHTML('beforeend', '<div class="splash" aria-hidden="true"><div class="splash-art">' +
+      '<i class="ring r1"></i><i class="ring r2"></i><i class="ring r3"></i>' + gx() + '</div><div class="splash-word">Gate<b>X</b></div></div>');
+  }
+  function hideSplash() {
+    const el = $('.splash');
+    if (!el || el.classList.contains('out')) return;
+    setTimeout(() => {
+      el.classList.add('out');
+      document.body.classList.add('entered');
+      setTimeout(() => el.remove(), 450);
+    }, Math.max(0, SPLASH_MS - (Date.now() - splashAt)));
+  }
+
   async function init() {
+    showSplash();
     state.tg = await loadTelegram();
     if (state.tg) {
       try { state.tg.ready(); state.tg.expand(); } catch (e) { /* ignore */ }
+      // full screen on phones (Bot API 8.0); Telegram keeps its close/menu
+      // buttons on top, the page pads around them via --tg-*-safe-area-inset-*
+      try {
+        const v = (x) => state.tg.isVersionAtLeast && state.tg.isVersionAtLeast(x);
+        if (/^(ios|android)$/.test(state.tg.platform) && v('8.0') && !state.tg.isFullscreen) state.tg.requestFullscreen();
+        if (v('7.7')) state.tg.disableVerticalSwipes();
+      } catch (e) { /* old client */ }
       state.tg.onEvent && state.tg.onEvent('themeChanged', applyTheme);
       state.tg.BackButton && state.tg.BackButton.onClick(goBack);
       state.tg.onEvent && state.tg.onEvent('activated', () => checkPayment(true));
     }
+    if (!themeChoice()) { const t = await cloudGet('gx_theme'); if (t) { state.theme = t; store('gx_theme', t); } }
     applyTheme();
     const saved = store('gx_platform');
     state.platform = PLATFORMS[saved] ? saved : detectPlatform();
