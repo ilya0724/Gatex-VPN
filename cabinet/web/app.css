@@ -472,7 +472,8 @@ body.has-sheet .demo-bar { display: none; }
   .splash-art { width: 300px; }
   .splash-word { font-size: 28px; }
   .nav-inner { max-width: 520px; }
-  .sheet-inner { max-width: 600px; }
+  .sheet-inner { max-width: 640px; }
+  .devices { grid-template-columns: repeat(3, 1fr); }
   .btn, .callout, .stat, .device, .list > * { transition: transform 0.15s ease, filter 0.15s ease, background-color 0.15s ease; }
 }
 @media (min-width: 860px) and (hover: hover) {
