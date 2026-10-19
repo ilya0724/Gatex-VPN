@@ -236,6 +236,7 @@
     confirmDevice: null,
     ref: null, // {link, count, bonus_percent} from api/referral
     busy: false,
+    removed: null,
     sheet: null // {kind:'welcome'} | {kind:'wizard', platform, remote, step} | {kind:'devices', remote}
   };
   const root = () => $('#app');
@@ -462,13 +463,32 @@
         '<span class="ico">' + ic(k.icon) + '</span>' +
         '<span class="txt"><b>' + esc(title) + '</b><span>' + esc(meta) + '</span>' + (seen ? '<span>Активность: ' + esc(seen) + '</span>' : '') + '</span>' +
         (confirming
-          ? '<span class="confirm-note">Удалить навсегда? VPN на нём отключится сразу и подключить его снова не получится. На остальных устройствах после этого обновите подписку в Happ.</span>' +
-            '<span class="confirm"><button class="btn small danger" data-act="device-delete" data-id="' + esc(d.id) + '"' + (state.busy ? ' disabled' : '') + '>' + (state.busy ? 'Удаляем…' : 'Удалить') + '</button><button class="btn small ghost" data-act="device-cancel">Нет</button></span>'
+          ? '<span class="confirm-note">Удалить? VPN на нём отключится сразу, и само оно не вернётся. На остальных устройствах после этого обновите подписку в Happ.</span>' +
+            '<span class="confirm"><button class="btn small danger" data-act="device-delete" data-id="' + esc(d.id) + '"' + (state.busy ? ' disabled' : '') + '>' + (state.busy === true ? 'Удаляем…' : 'Удалить') + '</button><button class="btn small ghost" data-act="device-cancel">Нет</button></span>'
           : '<button class="iconbtn" aria-label="Удалить ' + esc(title) + '" data-act="device-ask" data-id="' + esc(d.id) + '">' + ic('close', 'sm') + '</button>') +
         '</div>';
     });
     html += '<button class="row" data-act="devices" data-remote="1">' + rowInner('qr', 'Подключить ещё устройство', limit && list.length >= limit ? 'Сначала удалите одно из старых' : 'Инструкция и QR-код') + '</button></div>';
-    html += '<p class="muted" style="margin:-4px 4px 0;font-size:13px">Удалите устройство, которым больше не пользуетесь: место освободится для нового. Удалённое устройство отключается навсегда, а остальным нужно обновить подписку в Happ.</p>';
+    html += '<p class="muted" style="margin:-4px 4px 0;font-size:13px">Удалите устройство, которым больше не пользуетесь: место освободится для нового. Удалённое устройство отключается и само не вернётся, а остальным нужно обновить подписку в Happ.</p>';
+    html += removedBlock();
+    return html;
+  }
+
+  // Removed devices stay blocked until the user brings them back here.
+  function removedBlock() {
+    const list = state.removed;
+    if (!Array.isArray(list) || !list.length) return '';
+    let html = '<h2 class="h-section">Удалённые устройства · ' + list.length + '</h2><div class="list">';
+    list.forEach((d) => {
+      const k = deviceKind(d);
+      const title = deviceTitle(d, k);
+      const meta = [k.name !== title ? k.name : '', (d.app || '').split('/')[0], d.removed_at ? 'удалено ' + fmtDate(d.removed_at) : ''].filter(Boolean).join(' · ');
+      const busy = state.busy === 'restore:' + d.id;
+      html += '<div class="device-row removed"><span class="ico">' + ic(k.icon) + '</span>' +
+        '<span class="txt"><b>' + esc(title) + '</b><span>' + esc(meta) + '</span></span>' +
+        '<button class="btn small ghost" data-act="device-restore" data-id="' + esc(d.id) + '"' + (state.busy ? ' disabled' : '') + '>' + (busy ? 'Возвращаем…' : 'Вернуть') + '</button></div>';
+    });
+    html += '</div><p class="muted" style="margin:-4px 4px 0;font-size:13px">Вернули устройство? Обновите на нём подписку в Happ, и VPN снова заработает.</p>';
     return html;
   }
 
@@ -1000,6 +1020,8 @@
         state.confirmDevice = null; render(); break;
       case 'device-delete':
         deleteDevice(t.dataset.id); break;
+      case 'device-restore':
+        restoreDevice(t.dataset.id); break;
       case 'plans':
         haptic('light'); openPlans(); break;
       case 'plan-pick': {
@@ -1048,7 +1070,9 @@
     try {
       if (state.demo) {
         await new Promise((r) => setTimeout(r, 500));
+        const gone = state.data.devices.find((d) => d.id === id);
         state.data.devices = state.data.devices.filter((d) => d.id !== id);
+        if (gone) state.removed = [{ id: gone.id, platform: gone.platform, model: gone.model, app: gone.app, removed_at: new Date().toISOString() }].concat(state.removed || []);
       } else {
         const res = await fetch(new URL('api/devices/delete', location.href), {
           method: 'POST',
@@ -1057,12 +1081,49 @@
         });
         if (!res.ok) throw new Error(String(res.status));
         state.data.devices = (await res.json()).devices;
+        fetchRemoved();
       }
       haptic('ok'); toast('Устройство удалено. Обновите подписку в Happ на остальных устройствах');
     } catch (e) {
       toast('Не получилось удалить. Попробуйте ещё раз');
     }
     state.busy = false; state.confirmDevice = null; render();
+  }
+
+  async function restoreDevice(id) {
+    if (state.busy) return;
+    state.busy = 'restore:' + id; render();
+    try {
+      if (state.demo) {
+        await new Promise((r) => setTimeout(r, 500));
+        state.removed = state.removed.filter((d) => d.id !== id);
+      } else {
+        const res = await fetch(new URL('api/devices/restore', location.href), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ initData: state.tg.initData, id })
+        });
+        if (!res.ok) throw new Error(String(res.status));
+        state.removed = (await res.json()).removed;
+      }
+      haptic('ok'); toast('Готово. Обновите подписку в Happ на этом устройстве');
+    } catch (e) {
+      toast('Не получилось вернуть. Попробуйте ещё раз');
+    }
+    state.busy = false; render();
+  }
+
+  async function fetchRemoved() {
+    try {
+      const res = await fetch(new URL('api/devices/removed', location.href), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ initData: state.tg.initData })
+      });
+      if (!res.ok) return;
+      state.removed = (await res.json()).removed;
+      if (state.tab === 'profile') render();
+    } catch (e) { /* the section just stays hidden */ }
   }
 
   // ------------------------------------------------------------ boot
@@ -1109,6 +1170,7 @@
       const [data, cloudFlag] = await Promise.all([fetchMe(), cloudGet('gx_onboarded')]);
       state.data = data;
       fetchReferral();
+      fetchRemoved();
       const s = data.subscription || {};
       const onboarded = store('gx_onboarded') === '1' || cloudFlag === '1';
       if (!onboarded && (s.status === 'active' || s.status === 'none') && !s.first_connected_at) state.sheet = { kind: 'welcome' };

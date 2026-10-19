@@ -199,6 +199,8 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .device-row .confirm { display: flex; gap: 8px; width: 100%; }
 .device-row .confirm-note { width: 100%; font-size: 13px; line-height: 1.35; color: var(--text); }
 .device-row .confirm .btn { flex: 1; min-height: 40px; }
+.device-row.removed .ico { color: var(--muted); }
+.device-row.removed > .btn { flex: none; width: auto; padding: 0 14px; min-height: 36px; }
 .list > .device-row + .device-row, .list > .device-row + .row { border-top: 1px solid var(--line); }
 .btn.danger { background: var(--danger); color: var(--accent-ink); }
 .btn:disabled { opacity: 0.6; cursor: default; }

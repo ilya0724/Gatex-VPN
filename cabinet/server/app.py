@@ -402,6 +402,85 @@ async def _bot_revoke_hwid(request: web.Request, init_data: str, hwid: str) -> b
         return False
 
 
+def _bot_devices_url(cfg: Config, name: str) -> str:
+    """Sibling of the revoke endpoint: …/api/devices/{revoked,restore-hwid}."""
+    return cfg.bot_revoke_url.rsplit("/", 1)[0] + "/" + name if cfg.bot_revoke_url else ""
+
+
+async def _bot_removed(request: web.Request, init_data: str) -> list[dict]:
+    """Devices this user removed, as the bot's blacklist has them; raises on failure."""
+    cfg: Config = request.app["cfg"]
+    if not cfg.bot_revoke_url:
+        return []
+    http: ClientSession = request.app["http"]
+    async with http.post(_bot_devices_url(cfg, "revoked"), json={"initData": init_data},
+                         timeout=ClientTimeout(total=10)) as resp:
+        resp.raise_for_status()
+        data = await resp.json(content_type=None)
+    devices = data.get("devices") if isinstance(data, dict) else None
+    return [d for d in devices or [] if isinstance(d, dict) and d.get("hwid")]
+
+
+def normalize_removed(devices: list[dict]) -> list[dict]:
+    seen, out = set(), []
+    for d in devices:
+        did = device_id(str(d["hwid"]))
+        if did in seen:
+            continue
+        seen.add(did)
+        out.append({
+            "id": did,
+            "platform": d.get("platform") or "",
+            "model": d.get("model") or "",
+            "app": d.get("app") or "",
+            "removed_at": d.get("revoked_at"),
+        })
+    out.sort(key=lambda d: _ts(d["removed_at"]), reverse=True)
+    return out
+
+
+async def handle_devices_removed(request: web.Request) -> web.Response:
+    init, body = await _auth(request)
+    if not init:
+        return json_response({"error": "unauthorized"}, 401)
+    try:
+        removed = await _bot_removed(request, body["initData"])
+    except (ClientError, TimeoutError, ValueError):
+        log.warning("removed devices lookup failed for %s", init["user"]["id"])
+        return json_response({"error": "bot_unavailable"}, 502)
+    return json_response({"removed": normalize_removed(removed)})
+
+
+async def handle_device_restore(request: web.Request) -> web.Response:
+    """Lift the blacklist for one removed device; it connects again after
+    the subscription is added to it anew."""
+    cfg: Config = request.app["cfg"]
+    init, body = await _auth(request)
+    if not init:
+        return json_response({"error": "unauthorized"}, 401)
+    tg_id = int(init["user"]["id"])
+    target = str(body.get("id", ""))
+    http: ClientSession = request.app["http"]
+    try:
+        removed = await _bot_removed(request, body["initData"])
+        match = next((d for d in removed if device_id(str(d["hwid"])) == target), None)
+        if not match:
+            return json_response({"error": "not_found"}, 404)
+        async with http.post(_bot_devices_url(cfg, "restore-hwid"),
+                             json={"initData": body["initData"], "hwid": str(match["hwid"])},
+                             timeout=ClientTimeout(total=10)) as resp:
+            if resp.status != 200:
+                log.error("bot restore for tg %s returned %s", tg_id, resp.status)
+                return json_response({"error": "bot_unavailable"}, 502)
+        log.info("tg %s restored device %s", tg_id, target)
+        removed = await _bot_removed(request, body["initData"])
+    except (ClientError, TimeoutError, ValueError):
+        log.exception("device restore failed for %s", tg_id)
+        return json_response({"error": "bot_unavailable"}, 502)
+    request.app["cache"].pop(tg_id, None)
+    return json_response({"removed": normalize_removed(removed)})
+
+
 async def handle_device_delete(request: web.Request) -> web.Response:
     """Remove a device for good: blacklisted in the bot (the subscription
     proxy then refuses it), dropped from the panel, and, unless turned off,
@@ -552,6 +631,8 @@ def create_app(cfg: Config) -> web.Application:
     app.on_cleanup.append(_on_cleanup)
     app.router.add_post("/api/me", handle_me)
     app.router.add_post("/api/devices/delete", handle_device_delete)
+    app.router.add_post("/api/devices/removed", handle_devices_removed)
+    app.router.add_post("/api/devices/restore", handle_device_restore)
     app.router.add_post("/api/pay", handle_pay)
     app.router.add_post("/api/referral", handle_referral)
     app.router.add_get("/api/health", handle_health)

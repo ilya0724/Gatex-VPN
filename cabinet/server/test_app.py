@@ -335,3 +335,57 @@ async def test_device_delete_blacklists_in_the_bot_first(aiohttp_client, aiohttp
         assert fake.deleted == [("uuid-1", "hw-old")] and fake.revoked == ["uuid-1"]
     finally:
         await session.close()
+
+
+async def test_removed_devices_can_be_restored(aiohttp_client, aiohttp_server, tmp_path):
+    from aiohttp import ClientSession, web as aweb
+
+    blocked = {"hw-old": {"hwid": "hw-old", "platform": "android", "model": "Pixel 8",
+                          "app": "Happ", "revoked_at": "2026-10-19T08:00:00Z"}}
+    restored = []
+
+    async def revoked(request):
+        assert (await request.json())["initData"]
+        return aweb.json_response({"devices": list(blocked.values())})
+
+    async def restore(request):
+        hwid = (await request.json())["hwid"]
+        if hwid not in blocked:
+            return aweb.json_response({"error": "not_found"}, status=404)
+        restored.append(blocked.pop(hwid)["hwid"])
+        return aweb.json_response({"ok": True})
+
+    bot = aweb.Application()
+    bot.router.add_post("/api/devices/revoked", revoked)
+    bot.router.add_post("/api/devices/restore-hwid", restore)
+    bot_server = await aiohttp_server(bot)
+
+    application = cabinet.create_app(cfg(web_dir=tmp_path,
+                                         bot_revoke_url=str(bot_server.make_url("/api/devices/revoke-hwid"))))
+    application.on_startup.clear()
+    application.on_cleanup.clear()
+    application["rw"] = FakeRW([{"uuid": "uuid-1", "status": "ACTIVE", "shortUuid": "s1"}], [])
+    session = ClientSession()
+    application["http"] = session
+    c = await aiohttp_client(application)
+    try:
+        r = await c.post("/api/devices/removed", json={"initData": init_data()})
+        assert r.status == 200
+        removed = (await r.json())["removed"]
+        assert [d["model"] for d in removed] == ["Pixel 8"]
+        assert "hw-old" not in json.dumps(removed)  # raw HWID stays server-side
+
+        r = await c.post("/api/devices/restore", json={"initData": init_data(), "id": "nope"})
+        assert r.status == 404
+        r = await c.post("/api/devices/restore", json={"initData": init_data(), "id": removed[0]["id"]})
+        assert r.status == 200
+        assert (await r.json())["removed"] == [] and restored == ["hw-old"]
+        r = await c.post("/api/devices/removed", json={"initData": "bad"})
+        assert r.status == 401
+    finally:
+        await session.close()
+
+
+async def test_removed_devices_without_the_bot(client):
+    r = await client.post("/api/devices/removed", json={"initData": init_data()})
+    assert r.status == 200 and (await r.json())["removed"] == []
