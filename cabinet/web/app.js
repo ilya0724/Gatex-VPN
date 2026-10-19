@@ -346,7 +346,7 @@
 
   // ------------------------------------------------------------ screens
   function header() {
-    return '<header class="topbar"><div class="brand"><span class="brand-logo">' + gx() + '</span><span>Gate<b>X</b></span></div></header>';
+    return '<header class="topbar"><div class="brand"><span>Gate<b>X</b></span></div></header>';
   }
 
   function homeScreen() {
@@ -363,6 +363,7 @@
       '<div class="gate" data-tone="' + v.tone + '"><i class="ring r1"></i><i class="ring r2"></i><i class="ring r3"></i><div class="core">' + gx() + '</div></div>' +
       '<h1 class="hero-title">' + esc(v.title) + '</h1><div class="hero-sub">' + sub + '</div></section>';
 
+    html += '<div class="dock">';
     if (s.status !== 'none') html += '<div class="stats">' + tariffStat(v) + devicesStat(s) + '</div>';
 
     if (v.active && !s.first_connected_at) {
@@ -381,7 +382,7 @@
       html += '<a class="btn ' + (v.active && v.tone === 'ok' ? 'ghost' : 'primary') + ' split" href="' + esc(v.links.buy) + '" data-link>' + ic('card') + '<span>' + buyLabel + '</span>' + price + '</a>';
       html += '<button class="btn ' + (v.active && v.tone === 'ok' ? 'primary' : 'invert') + ' split" data-act="tab" data-tab="setup">' + ic('plug') + '<span>Установка и настройка</span><span class="spacer"></span>' + ic(PLATFORMS[state.platform].icon, 'sm') + '</button>';
     }
-    return html;
+    return html + '</div>';
   }
 
   function tariffStat(v) {

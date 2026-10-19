@@ -102,7 +102,11 @@ svg { display: block; }
   display: flex;
   flex-direction: column;
   gap: 14px;
+  min-height: 100vh;
+  min-height: 100dvh;
 }
+/* home: hero on top, tiles and buttons pinned low, where the thumb reaches */
+.dock { margin-top: auto; display: flex; flex-direction: column; gap: 12px; }
 
 /* ---------- header */
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 2px; }
@@ -110,16 +114,13 @@ svg { display: block; }
 .brand-mark { width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
 .brand-mark .icon { width: 20px; height: 20px; }
 .brand b { color: var(--accent); font-weight: 700; }
-.brand-logo { display: grid; place-items: center; flex: none; color: var(--accent); }
-.brand-logo .gx { width: 34px; }
-.brand-logo .gx path { stroke-width: 1.3px; }
 /* GX monogram: G follows the text colour, X the current (accent / tone) colour */
 /* outlined letters only: thin strokes that keep their width at any size */
 .gx { display: block; height: auto; overflow: visible; }
-.gx path { fill: none; stroke-width: 1.5px; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.gx path { fill: none; stroke-width: 2.6px; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 .gx .gx-g { stroke: var(--gx-g, var(--text)); }
 .gx .gx-x { stroke: currentColor; transform-box: fill-box; transform-origin: center; filter: drop-shadow(0 0 6px color-mix(in srgb, currentColor 55%, transparent)); }
-.gate .core .gx { width: 64px; }
+.gate .core .gx { width: 116px; }
 @media (prefers-reduced-motion: no-preference) {
   .gx.spin .gx-x { animation: gx-spin 2.4s infinite; }
 }
@@ -139,14 +140,14 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 
 /* ---------- hero */
 .hero { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 8px 0 4px; }
-.gate { position: relative; width: 188px; height: 188px; display: grid; place-items: center; margin-bottom: 8px; color: var(--accent); --ring: var(--accent); }
+.gate { position: relative; width: min(268px, 74vw); aspect-ratio: 1; display: grid; place-items: center; margin-bottom: 8px; color: var(--accent); --ring: var(--accent); }
 .gate[data-tone="warn"] { color: var(--warn); --ring: var(--warn); }
 .gate[data-tone="off"] { color: var(--muted); --ring: var(--muted); }
 .gate .ring { position: absolute; inset: 0; border-radius: 50%; border: 1px solid var(--ring); opacity: 0.18; }
-.gate .ring.r2 { inset: 22px; opacity: 0.28; }
-.gate .ring.r3 { inset: 44px; opacity: 0.0; background: radial-gradient(circle, var(--ring), transparent 70%); }
+.gate .ring.r2 { inset: 13%; opacity: 0.28; }
+.gate .ring.r3 { inset: 22%; border: 0; opacity: 0.0; background: radial-gradient(circle, var(--ring), transparent 70%); }
 .gate[data-tone="ok"] .ring.r3 { opacity: 0.18; }
-.gate .core { width: 92px; height: 92px; border-radius: 30px; display: grid; place-items: center; background: var(--glass); border: 1px solid var(--line); box-shadow: var(--glass-edge), var(--shadow); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); }
+.gate .core { position: relative; display: grid; place-items: center; }
 .gate .core .icon { width: 50px; height: 50px; stroke-width: 1.6; }
 @media (prefers-reduced-motion: no-preference) {
   .gate[data-tone="ok"] .ring.r1 { animation: pulse 3.2s ease-out infinite; }
@@ -314,7 +315,7 @@ details.hint[open] > summary .chev { transform: rotate(90deg); }
 .qr { align-self: center; padding: 14px; border-radius: 22px; background: var(--qr-bg); line-height: 0; box-shadow: var(--shadow); }
 .qr svg { width: 196px; height: 196px; }
 
-.welcome-art { position: relative; height: 230px; display: grid; place-items: center; }
+.welcome-art { position: relative; min-height: 230px; display: grid; place-items: center; }
 .welcome-steps { display: flex; flex-direction: column; gap: 8px; }
 
 /* ---------- misc */
