@@ -438,21 +438,43 @@ body.has-sheet .demo-bar { display: none; }
 .splash-art .gx { width: 52%; }
 .splash-word { font: 600 22px/1 var(--font-display); letter-spacing: -0.01em; color: var(--text); opacity: 0; }
 .splash-word b { color: var(--accent); }
+/* the launch animation is short and plays once, so it runs even with reduced
+   motion (Windows often has animations off); only the app fade-in respects it */
+.splash-art .ring { animation: splash-ring 1.1s cubic-bezier(.2, .7, .2, 1) forwards; }
+.splash-art .ring.r2 { animation-delay: 0.12s; }
+.splash-art .ring.r3 { animation-delay: 0.24s; }
+.splash .gx-g { animation: splash-g 0.7s 0.15s cubic-bezier(.2, .7, .2, 1) both; }
+.splash .gx-x { animation: splash-x 0.9s 0.3s cubic-bezier(.5, -0.3, .3, 1.35) both; }
+.splash-word { animation: splash-word 0.6s 0.6s ease forwards; }
 @media (prefers-reduced-motion: no-preference) {
-  .splash-art .ring { animation: splash-ring 1.1s cubic-bezier(.2, .7, .2, 1) forwards; }
-  .splash-art .ring.r2 { animation-delay: 0.12s; }
-  .splash-art .ring.r3 { animation-delay: 0.24s; }
-  .splash .gx-g { animation: splash-g 0.7s 0.15s cubic-bezier(.2, .7, .2, 1) both; }
-  .splash .gx-x { animation: splash-x 0.9s 0.3s cubic-bezier(.5, -0.3, .3, 1.35) both; }
-  .splash-word { animation: splash-word 0.6s 0.6s ease forwards; }
   body.entered .app { animation: app-in 0.45s ease both; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .splash-art .ring { opacity: 0.25; }
-  .splash-word { opacity: 1; }
 }
 @keyframes splash-ring { from { transform: scale(0.5); opacity: 0; } 60% { opacity: 0.35; } to { transform: scale(1); opacity: 0.22; } }
 @keyframes splash-g { from { opacity: 0; transform: translateX(-14%); } to { opacity: 1; transform: none; } }
 @keyframes splash-x { from { opacity: 0; transform: rotate(-180deg) scale(0.4); } to { opacity: 1; transform: none; } }
 @keyframes splash-word { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes app-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+.note { margin: -4px 4px 0; font-size: 13px; }
+
+/* ---------- computer: wide window or full screen */
+@media (min-width: 860px) {
+  .app { max-width: 1080px; padding-left: 40px; padding-right: 40px; gap: 18px; }
+  .app > * { width: 100%; max-width: 640px; margin-inline: auto; }
+  .app > .note { max-width: 632px; }
+  .app.tab-home { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); grid-template-rows: auto 1fr; column-gap: 56px; align-items: center; }
+  .app.tab-home > * { max-width: none; margin-inline: 0; }
+  .app.tab-home .topbar { grid-column: 1 / -1; max-width: none; }
+  .app.tab-home .dock { margin-top: 0; max-width: 460px; }
+  .app.tab-home .gate { width: min(360px, 34vw); }
+  .app.tab-home .gate .core .gx { width: 150px; }
+  .app.tab-home .hero-title { font-size: 30px; }
+  .splash-art { width: 300px; }
+  .splash-word { font-size: 28px; }
+  .nav-inner { max-width: 520px; }
+  .sheet-inner { max-width: 600px; }
+  .btn, .callout, .stat, .device, .list > * { transition: transform 0.15s ease, filter 0.15s ease, background-color 0.15s ease; }
+}
+@media (min-width: 860px) and (hover: hover) {
+  .btn:hover, .callout:hover, .device:hover { filter: brightness(1.08); transform: translateY(-1px); }
+}

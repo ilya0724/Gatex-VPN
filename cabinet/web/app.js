@@ -84,7 +84,7 @@
   const GX_G = 'M512.0 242.0H717.52978515625Q714.1874389648438 237.40289306640625 710.5 233.0Q677.0 193.0 621.0 172.5Q565.0 152.0 492.0 152.0Q417.0 152.0 361.5 177.0Q306.0 202.0 276.0 252.0Q246.0 302.0 246.0 375.0Q246.0 447.0 274.0 495.5Q302.0 544.0 353.0 568.5Q404.0 593.0 474.0 593.0Q532.0 593.0 577.5 578.5Q623.0 564.0 653.5 536.5Q684.0 509.0 694.0 471.0H903.0Q887.0 558.0 832.0 624.0Q777.0 690.0 687.0 728.0Q597.0 766.0 473.0 766.0Q380.0 766.0 301.5 740.5Q223.0 715.0 163.5 665.0Q104.0 615.0 71.0 542.0Q38.0 469.0 38.0 375.0Q38.0 281.0 70.5 208.0Q103.0 135.0 161.5 85.0Q220.0 35.0 297.0 9.5Q374.0 -16.0 462.0 -16.0Q554.0 -16.0 623.5 11.0Q693.0 38.0 739.5 86.0Q746.5777587890625 93.30607604980469 753.1454467773438 100.92444610595703L763.0 0.0H910.0V388.0H512.0Z';
   const GX_X = 'M564.4285888671875 389.6925048828125 860.0 750.0H605.0L438.6498718261719 532.288330078125L270.0 750.0H11.0L308.06060791015625 389.7713317871094L-11.0 0.0H241.0L433.895263671875 248.2340850830078L626.0 0.0H881.0L564.4285888671875 389.6925048828125Z';
   const gx = (cls) => '<svg class="gx' + (cls ? ' ' + cls : '') + '" viewBox="28 -776 1874 802" aria-hidden="true"><g transform="scale(1 -1)">' +
-    '<path class="gx-g" d="' + GX_G + '"/><path class="gx-x" transform="translate(1011 0)" d="' + GX_X + '"/></g></svg>';
+    '<path class="gx-g" d="' + GX_G + '"/><g transform="translate(1011 0)"><path class="gx-x" d="' + GX_X + '"/></g></g></svg>';
   const ic = (name, cls) => '<svg class="icon' + (cls ? ' ' + cls : '') + '" viewBox="0 0 24 24" aria-hidden="true">' + (P[name] || '') + '</svg>';
 
   // ------------------------------------------------------------ platforms
@@ -483,7 +483,7 @@
         '</div>';
     });
     html += '<button class="row" data-act="devices" data-remote="1">' + rowInner('qr', 'Подключить ещё устройство', limit && list.length >= limit ? 'Сначала удалите одно из старых' : 'Инструкция и QR-код') + '</button></div>';
-    html += '<p class="muted" style="margin:-4px 4px 0;font-size:13px">Удалите устройство, которым больше не пользуетесь: место освободится для нового. Удалённое устройство отключается и само не вернётся, а остальным нужно обновить подписку в Happ.</p>';
+    html += '<p class="muted note">Удалите устройство, которым больше не пользуетесь: место освободится для нового. Удалённое устройство отключается и само не вернётся, а остальным нужно обновить подписку в Happ.</p>';
     html += removedBlock();
     return html;
   }
@@ -502,7 +502,7 @@
         '<span class="txt"><b>' + esc(title) + '</b><span>' + esc(meta) + '</span></span>' +
         '<button class="btn small ghost" data-act="device-restore" data-id="' + esc(d.id) + '"' + (state.busy ? ' disabled' : '') + '>' + (busy ? 'Возвращаем…' : 'Вернуть') + '</button></div>';
     });
-    html += '</div><p class="muted" style="margin:-4px 4px 0;font-size:13px">Вернули устройство? Обновите на нём подписку в Happ, и VPN снова заработает.</p>';
+    html += '</div><p class="muted note">Вернули устройство? Обновите на нём подписку в Happ, и VPN снова заработает.</p>';
     return html;
   }
 
@@ -917,7 +917,7 @@
     if (!state.data) { el.innerHTML = loadingScreen(); return; }
     hideSplash();
     const screens = { home: homeScreen, setup: setupScreen, profile: profileScreen, help: helpScreen };
-    el.innerHTML = '<main class="app">' + screens[state.tab]() + '</main>' + navBar() + demoBar();
+    el.innerHTML = '<main class="app tab-' + state.tab + '">' + screens[state.tab]() + '</main>' + navBar() + demoBar();
     renderSheet();
   }
   let lastSheetKey = '';
@@ -1227,11 +1227,11 @@
     state.tg = await loadTelegram();
     if (state.tg) {
       try { state.tg.ready(); state.tg.expand(); } catch (e) { /* ignore */ }
-      // full screen on phones (Bot API 8.0); Telegram keeps its close/menu
+      // full screen on phones and desktop (Bot API 8.0); Telegram keeps its close/menu
       // buttons on top, the page pads around them via --tg-*-safe-area-inset-*
       try {
         const v = (x) => state.tg.isVersionAtLeast && state.tg.isVersionAtLeast(x);
-        if (/^(ios|android)$/.test(state.tg.platform) && v('8.0') && !state.tg.isFullscreen) state.tg.requestFullscreen();
+        if (v('8.0') && !state.tg.isFullscreen) state.tg.requestFullscreen();
         if (v('7.7')) state.tg.disableVerticalSwipes();
       } catch (e) { /* old client */ }
       state.tg.onEvent && state.tg.onEvent('themeChanged', applyTheme);
