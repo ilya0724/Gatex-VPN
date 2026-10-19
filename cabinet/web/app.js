@@ -25,12 +25,6 @@
   function money(n) {
     return Math.round(n).toLocaleString('ru-RU').replace(/\s/g, '\u00a0') + '\u00a0₽';
   }
-  function fmtBytes(n) {
-    n = Number(n) || 0;
-    const gb = n / 1073741824;
-    if (gb >= 1) return (gb >= 100 ? Math.round(gb) : gb.toFixed(1)).toString().replace('.', ',') + ' ГБ';
-    return Math.max(0, Math.round(n / 1048576)) + ' МБ';
-  }
   function fmtAgo(iso) {
     const t = new Date(iso).getTime();
     if (!t) return null;
@@ -85,12 +79,12 @@
     refresh: '<path d="M20 11a8 8 0 0 0-14.9-3M4 4v4h4M4 13a8 8 0 0 0 14.9 3M20 20v-4h-4"/>',
     globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>'
   };
-  // GX monogram from the brand kit (static_D): G in the text colour, X in the
-  // accent, so the status tone still recolours it.
-  const GX_G = 'M838 325Q835 257 810.5 195.5Q786 134 739.5 86.0Q693 38 623.5 11.0Q554 -16 462 -16Q374 -16 297.0 9.5Q220 35 161.5 85.0Q103 135 70.5 208.0Q38 281 38 375Q38 469 71.0 542.0Q104 615 163.5 665.0Q223 715 301.5 740.5Q380 766 473 766Q597 766 687.0 728.0Q777 690 832.0 624.0Q887 558 903 471H694Q684 509 653.5 536.5Q623 564 577.5 578.5Q532 593 474 593Q404 593 353.0 568.5Q302 544 274.0 495.5Q246 447 246 375Q246 302 276.0 252.0Q306 202 361.5 177.0Q417 152 492 152Q565 152 621.0 172.5Q677 193 710.5 233.0Q744 273 749 329ZM512 242V388H910V0H763L734 297L773 242Z';
-  const GX_X = 'M513 327V453L881 0H626L383 314H485L241 0H-11L359 452V328L11 750H270L490 466H388L605 750H860Z';
-  const gx = (cls) => '<svg class="gx' + (cls ? ' ' + cls : '') + '" viewBox="28 -776 1824 802" aria-hidden="true"><g transform="scale(1 -1)">' +
-    '<path class="gx-g" d="' + GX_G + '"/><path class="gx-x" transform="translate(961 0)" d="' + GX_X + '"/></g></svg>';
+  // Outlined GX monogram from the brand kit (avatar/outline): G in the text
+  // colour, X in the accent, so the status tone still recolours it.
+  const GX_G = 'M512.0 242.0H717.52978515625Q714.1874389648438 237.40289306640625 710.5 233.0Q677.0 193.0 621.0 172.5Q565.0 152.0 492.0 152.0Q417.0 152.0 361.5 177.0Q306.0 202.0 276.0 252.0Q246.0 302.0 246.0 375.0Q246.0 447.0 274.0 495.5Q302.0 544.0 353.0 568.5Q404.0 593.0 474.0 593.0Q532.0 593.0 577.5 578.5Q623.0 564.0 653.5 536.5Q684.0 509.0 694.0 471.0H903.0Q887.0 558.0 832.0 624.0Q777.0 690.0 687.0 728.0Q597.0 766.0 473.0 766.0Q380.0 766.0 301.5 740.5Q223.0 715.0 163.5 665.0Q104.0 615.0 71.0 542.0Q38.0 469.0 38.0 375.0Q38.0 281.0 70.5 208.0Q103.0 135.0 161.5 85.0Q220.0 35.0 297.0 9.5Q374.0 -16.0 462.0 -16.0Q554.0 -16.0 623.5 11.0Q693.0 38.0 739.5 86.0Q746.5777587890625 93.30607604980469 753.1454467773438 100.92444610595703L763.0 0.0H910.0V388.0H512.0Z';
+  const GX_X = 'M564.4285888671875 389.6925048828125 860.0 750.0H605.0L438.6498718261719 532.288330078125L270.0 750.0H11.0L308.06060791015625 389.7713317871094L-11.0 0.0H241.0L433.895263671875 248.2340850830078L626.0 0.0H881.0L564.4285888671875 389.6925048828125Z';
+  const gx = (cls) => '<svg class="gx' + (cls ? ' ' + cls : '') + '" viewBox="28 -776 1874 802" aria-hidden="true"><g transform="scale(1 -1)">' +
+    '<path class="gx-g" d="' + GX_G + '"/><path class="gx-x" transform="translate(1011 0)" d="' + GX_X + '"/></g></svg>';
   const ic = (name, cls) => '<svg class="icon' + (cls ? ' ' + cls : '') + '" viewBox="0 0 24 24" aria-hidden="true">' + (P[name] || '') + '</svg>';
 
   // ------------------------------------------------------------ platforms
@@ -206,8 +200,8 @@
       device_limit: s.trial ? 2 : s.tariff ? s.tariff.devices : 3,
       online_at: s.connected ? new Date(Date.now() - 12 * 60000).toISOString() : null,
       first_connected_at: s.connected ? new Date(Date.now() - 20 * DAY).toISOString() : null,
-      sub_url: 'https://app.fast-cloude-cdn.online/demo-7fK2pQ',
-      mirror_url: 'https://r1.fast-cloude-cdn.online/s/demo-7fK2pQ'
+      sub_url: 'https://r1.fast-cloude-cdn.online/s/demo-7fK2pQ',
+      mirror_url: 'https://app.fast-cloude-cdn.online/demo-7fK2pQ'
     };
     return {
       user: { id: 700123456, first_name: 'Иван', last_name: '', username: 'ivan_demo', photo_url: '' },
@@ -216,7 +210,7 @@
         seen_at: new Date(Date.now() - d.seenMin * 60000).toISOString(),
         added_at: new Date(Date.now() - d.addedDays * DAY).toISOString()
       })),
-      links: { bot: 'https://t.me/gatexvpn_bot', buy: 'https://t.me/gatexvpn_bot', support: 'https://t.me/gatexvpn_bot', channel: 'https://t.me/gaatex_vpn', referral: 'https://t.me/gatexvpn_bot' },
+      links: { bot: 'https://t.me/gatexvpn_bot', buy: 'https://t.me/gatexvpn_bot', support: 'https://t.me/gatexvpn_support', channel: 'https://t.me/gaatex_vpn', referral: 'https://t.me/gatexvpn_bot' },
       price_from: null,
       tariff: s.tariff || (s.trial ? { code: 'trial', title: 'Пробный', bypass: true, devices: 2 } : null),
       plans: DEMO_PLANS
@@ -361,8 +355,7 @@
     if (s.status === 'none') sub = '<span>' + (v.newFlow ? 'Выберите тариф, и здесь появится всё для подключения' : 'Оформите подписку в боте, и здесь появится всё для подключения') + '</span>';
     else if (v.exp) {
       const word = v.exp > Date.now() ? 'до ' : 'закончилась ';
-      sub = '<span class="num">' + word + esc(fmtDate(s.expire_at)) + '</span>' + (v.badge ? '<span class="pill ' + v.badge.cls + '">' + esc(v.badge.text) + '</span>' : '') + (s.is_trial ? '<span class="pill">пробный период</span>' : '') +
-        (v.tariff && v.tariff.code !== 'trial' ? '<span class="pill">' + esc(tariffName(v.tariff)) + '</span>' : '');
+      sub = '<span class="num">' + word + esc(fmtDate(s.expire_at)) + '</span>' + (v.badge ? '<span class="pill ' + v.badge.cls + '">' + esc(v.badge.text) + '</span>' : '') + (s.is_trial ? '<span class="pill">пробный период</span>' : '');
     }
 
     let html = header();
@@ -370,16 +363,7 @@
       '<div class="gate" data-tone="' + v.tone + '"><i class="ring r1"></i><i class="ring r2"></i><i class="ring r3"></i><div class="core">' + gx() + '</div></div>' +
       '<h1 class="hero-title">' + esc(v.title) + '</h1><div class="hero-sub">' + sub + '</div></section>';
 
-    if (s.status !== 'none') {
-      const online = s.online_at ? fmtAgo(s.online_at) : null;
-      const traffic = s.limit_bytes > 0
-        ? '<div class="stat wide"><span class="k">Трафик за период</span><span class="v">' + fmtBytes(s.used_bytes) + ' из ' + fmtBytes(s.limit_bytes) + '</span><div class="bar"><i style="width:' + Math.min(100, Math.round((s.used_bytes / s.limit_bytes) * 100)) + '%"></i></div></div>'
-        : '<div class="stat"><span class="k">Трафик</span><span class="v">без лимита</span></div>';
-      html += '<div class="stats">' + traffic +
-        devicesStat(s) +
-        '<div class="stat' + (s.limit_bytes > 0 ? '' : ' wide') + '"><span class="k">Последнее подключение</span><span class="v">' + esc(online || 'ещё не было') + '</span></div>' +
-        '</div>';
-    }
+    if (s.status !== 'none') html += '<div class="stats">' + tariffStat(v) + devicesStat(s) + '</div>';
 
     if (v.active && !s.first_connected_at) {
       html += '<button class="callout" data-act="setup-here">' +
@@ -398,6 +382,13 @@
       html += '<button class="btn ' + (v.active && v.tone === 'ok' ? 'primary' : 'invert') + ' split" data-act="tab" data-tab="setup">' + ic('plug') + '<span>Установка и настройка</span><span class="spacer"></span>' + ic(PLATFORMS[state.platform].icon, 'sm') + '</button>';
     }
     return html;
+  }
+
+  function tariffStat(v) {
+    const t = v.tariff;
+    const value = t ? t.title + (t.code !== 'trial' && t.bypass ? ' + БС' : '') : 'Прежний';
+    const inner = '<span class="k">Тариф</span><span class="v">' + esc(value) + '</span>';
+    return v.newFlow ? '<button class="stat tappable" data-act="plans">' + inner + '</button>' : '<div class="stat">' + inner + '</div>';
   }
 
   function devicesStat(s) {

@@ -4,9 +4,15 @@
   --bg: #06110e;
   --bg-2: #0a1b16;
   --glow: rgba(46, 230, 166, 0.16);
-  --surface: rgba(255, 255, 255, 0.045);
+  --surface: rgba(255, 255, 255, 0.05);
   --surface-2: rgba(255, 255, 255, 0.08);
-  --line: rgba(255, 255, 255, 0.08);
+  --line: rgba(255, 255, 255, 0.09);
+  /* frosted glass: translucent fill, lit top edge, soft blur of the glow behind */
+  --glass: linear-gradient(160deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.025) 60%);
+  --glass-edge: inset 0 1px 0 rgba(255, 255, 255, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  --glass-blur: blur(18px) saturate(150%);
+  --orb-1: rgba(46, 230, 166, 0.20);
+  --orb-2: rgba(40, 140, 255, 0.10);
   --text: #eaf5f0;
   --muted: #8ea89f;
   --accent: #2ee6a6;
@@ -35,7 +41,10 @@
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
     --bg: #edf4f0; --bg-2: #e2eee8; --glow: rgba(15, 168, 116, 0.14);
-    --surface: #ffffff; --surface-2: #f3f8f5; --line: rgba(8, 40, 28, 0.09);
+    --surface: rgba(255, 255, 255, 0.6); --surface-2: rgba(255, 255, 255, 0.7); --line: rgba(8, 40, 28, 0.08);
+    --glass: linear-gradient(160deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.5) 60%);
+    --glass-edge: inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+    --orb-1: rgba(15, 168, 116, 0.18); --orb-2: rgba(40, 140, 255, 0.10);
     --text: #0b1f18; --muted: #587066; --accent: #0fa874; --accent-2: #0b8a5f;
     --accent-ink: #ffffff; --accent-soft: rgba(15, 168, 116, 0.11);
     --warn: #b86e00; --warn-soft: rgba(230, 150, 20, 0.14);
@@ -47,7 +56,10 @@
 }
 :root[data-theme="light"] {
   --bg: #edf4f0; --bg-2: #e2eee8; --glow: rgba(15, 168, 116, 0.14);
-  --surface: #ffffff; --surface-2: #f3f8f5; --line: rgba(8, 40, 28, 0.09);
+  --surface: rgba(255, 255, 255, 0.6); --surface-2: rgba(255, 255, 255, 0.7); --line: rgba(8, 40, 28, 0.08);
+    --glass: linear-gradient(160deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.5) 60%);
+    --glass-edge: inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 0 0 1px rgba(255, 255, 255, 0.6);
+    --orb-1: rgba(15, 168, 116, 0.18); --orb-2: rgba(40, 140, 255, 0.10);
   --text: #0b1f18; --muted: #587066; --accent: #0fa874; --accent-2: #0b8a5f;
   --accent-ink: #ffffff; --accent-soft: rgba(15, 168, 116, 0.11);
   --warn: #b86e00; --warn-soft: rgba(230, 150, 20, 0.14);
@@ -63,6 +75,8 @@ body {
   margin: 0;
   background:
     radial-gradient(120% 60% at 50% -10%, var(--glow), transparent 70%),
+    radial-gradient(60% 40% at 0% 45%, var(--orb-1), transparent 70%),
+    radial-gradient(60% 45% at 100% 80%, var(--orb-2), transparent 70%),
     linear-gradient(180deg, var(--bg-2), var(--bg) 55%);
   background-color: var(--bg);
   background-attachment: fixed;
@@ -96,14 +110,15 @@ svg { display: block; }
 .brand-mark { width: 30px; height: 30px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
 .brand-mark .icon { width: 20px; height: 20px; }
 .brand b { color: var(--accent); font-weight: 700; }
-.brand-logo { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; flex: none;
-  background: radial-gradient(120% 90% at 50% 0%, rgba(46, 230, 166, 0.26), transparent 70%), linear-gradient(#0e271e, #06110e);
-  color: #2ee6a6; --gx-g: #eaf5f0; box-shadow: inset 0 0 0 1px rgba(46, 230, 166, 0.18); }
-.brand-logo .gx { width: 23px; }
+.brand-logo { display: grid; place-items: center; flex: none; color: var(--accent); }
+.brand-logo .gx { width: 34px; }
+.brand-logo .gx path { stroke-width: 1.3px; }
 /* GX monogram: G follows the text colour, X the current (accent / tone) colour */
+/* outlined letters only: thin strokes that keep their width at any size */
 .gx { display: block; height: auto; overflow: visible; }
-.gx .gx-g { fill: var(--gx-g, var(--text)); }
-.gx .gx-x { fill: currentColor; transform-box: fill-box; transform-origin: center; }
+.gx path { fill: none; stroke-width: 1.5px; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.gx .gx-g { stroke: var(--gx-g, var(--text)); }
+.gx .gx-x { stroke: currentColor; transform-box: fill-box; transform-origin: center; filter: drop-shadow(0 0 6px color-mix(in srgb, currentColor 55%, transparent)); }
 .gate .core .gx { width: 64px; }
 @media (prefers-reduced-motion: no-preference) {
   .gx.spin .gx-x { animation: gx-spin 2.4s infinite; }
@@ -131,7 +146,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .gate .ring.r2 { inset: 22px; opacity: 0.28; }
 .gate .ring.r3 { inset: 44px; opacity: 0.0; background: radial-gradient(circle, var(--ring), transparent 70%); }
 .gate[data-tone="ok"] .ring.r3 { opacity: 0.18; }
-.gate .core { width: 92px; height: 92px; border-radius: 30px; display: grid; place-items: center; background: var(--surface-2); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.gate .core { width: 92px; height: 92px; border-radius: 30px; display: grid; place-items: center; background: var(--glass); border: 1px solid var(--line); box-shadow: var(--glass-edge), var(--shadow); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); }
 .gate .core .icon { width: 50px; height: 50px; stroke-width: 1.6; }
 @media (prefers-reduced-motion: no-preference) {
   .gate[data-tone="ok"] .ring.r1 { animation: pulse 3.2s ease-out infinite; }
@@ -149,10 +164,11 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 
 /* ---------- stats */
 .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.stat { background: var(--glass); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .stat .k { font-size: 12.5px; color: var(--muted); }
 .stat .v { font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .stat.wide { grid-column: 1 / -1; }
+.stat, .card, .list, .callout { box-shadow: var(--glass-edge); backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur); }
 .bar { height: 6px; border-radius: 99px; background: var(--surface-2); overflow: hidden; margin-top: 4px; }
 .bar > i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--accent-2), var(--accent)); }
 
@@ -171,7 +187,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .linkish { background: none; border: 0; padding: 6px; color: var(--accent); font-weight: 600; cursor: pointer; font-size: 14px; }
 
 /* ---------- cards & lists */
-.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.card { background: var(--glass); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .card.accent { background: linear-gradient(160deg, var(--accent-soft), var(--surface)); border-color: transparent; }
 .callout { display: flex; gap: 12px; align-items: flex-start; padding: 14px; border-radius: var(--radius); background: var(--accent-soft); color: var(--text); border: 0; text-align: left; width: 100%; cursor: pointer; }
 .callout.warn { background: var(--warn-soft); }
@@ -181,7 +197,7 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .callout span { font-size: 13.5px; color: var(--muted); }
 .callout .chev { margin-left: auto; align-self: center; color: var(--muted); }
 
-.list { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 6px; }
+.list { display: flex; flex-direction: column; background: var(--glass); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 6px; }
 .row { display: flex; align-items: center; gap: 12px; padding: 12px 10px; border-radius: 14px; background: none; border: 0; width: 100%; text-align: left; cursor: pointer; min-width: 0; }
 .row:active, .row:hover { background: var(--surface-2); }
 .row .ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--surface-2); color: var(--accent); flex: none; }

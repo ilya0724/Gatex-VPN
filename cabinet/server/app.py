@@ -34,19 +34,23 @@ INIT_DATA_MAX_AGE = 24 * 3600
 CACHE_TTL = 30
 
 
+SUPPORT_DEFAULT = "https://t.me/gatexvpn_support"
+
+
 @dataclass
 class Config:
     bot_token: str
     rw_api_base: str
     rw_api_token: str
     bot_username: str = "gatexvpn_bot"
-    support_url: str = ""
+    support_url: str = SUPPORT_DEFAULT
     channel_url: str = ""
     buy_url: str = ""
     referral_url: str = ""
     price_from: str = ""
     sub_url_template: str = ""
     mirror_url_template: str = ""
+    prefer_mirror: bool = False
     trial_tag: str = plans.TRIAL["tag"]
     bot_pay_url: str = ""
     bot_me_url: str = ""
@@ -67,13 +71,15 @@ class Config:
             rw_api_base=get("RW_API_BASE").rstrip("/"),
             rw_api_token=get("RW_API_TOKEN"),
             bot_username=bot,
-            support_url=get("SUPPORT_URL", bot_link),
+            # an empty line in .env counts as unset, so links never come out blank
+            support_url=get("SUPPORT_URL") or SUPPORT_DEFAULT,
             channel_url=get("CHANNEL_URL"),
-            buy_url=get("BUY_URL", bot_link),
-            referral_url=get("REFERRAL_URL", bot_link),
+            buy_url=get("BUY_URL") or bot_link,
+            referral_url=get("REFERRAL_URL") or bot_link,
             price_from=get("PRICE_FROM"),
             sub_url_template=get("SUB_URL_TEMPLATE"),
             mirror_url_template=get("MIRROR_URL_TEMPLATE"),
+            prefer_mirror=get("PREFER_MIRROR").lower() in ("1", "true", "yes"),
             trial_tag=get("TRIAL_TAG") or plans.TRIAL["tag"],
             bot_pay_url=get("BOT_PAY_URL"),
             bot_me_url=get("BOT_ME_URL"),
@@ -258,6 +264,8 @@ def normalize_subscription(user: dict | None, cfg: Config) -> dict:
     if cfg.sub_url_template and short:
         sub_url = cfg.sub_url_template.format(shortUuid=short)
     mirror = cfg.mirror_url_template.format(shortUuid=short) if cfg.mirror_url_template and short else None
+    if cfg.prefer_mirror and mirror:
+        sub_url, mirror = mirror, sub_url or None
 
     status = STATUS_MAP.get(str(user.get("status", "")).upper(), "disabled")
     if status == "active" and 0 < _ts(user.get("expireAt")) < time.time():

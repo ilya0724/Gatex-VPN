@@ -389,3 +389,14 @@ async def test_removed_devices_can_be_restored(aiohttp_client, aiohttp_server, t
 async def test_removed_devices_without_the_bot(client):
     r = await client.post("/api/devices/removed", json={"initData": init_data()})
     assert r.status == 200 and (await r.json())["removed"] == []
+
+
+def test_mirror_can_be_the_primary_link():
+    user = {"status": "ACTIVE", "shortUuid": "abc", "subscriptionUrl": "https://sub/abc"}
+    s = cabinet.normalize_subscription(user, cfg(prefer_mirror=True))
+    assert s["sub_url"] == "https://r1.example/s/abc" and s["mirror_url"] == "https://sub/abc"
+
+
+def test_empty_support_link_falls_back_to_the_support_account(monkeypatch):
+    monkeypatch.setenv("SUPPORT_URL", "")
+    assert cabinet.Config.from_env().support_url == "https://t.me/gatexvpn_support"
