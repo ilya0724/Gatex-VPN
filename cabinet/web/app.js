@@ -183,10 +183,18 @@
   const DEMO_PLANS = {
     months: [{ months: 1, discount: 0 }, { months: 3, discount: 10 }, { months: 6, discount: 15 }, { months: 12, discount: 25 }],
     plans: [
-      { code: 'eco', title: 'Эконом', base_devices: 2, device_steps: [2, 4, 6, 8],
-        prices: { plain: { 1: 50, 3: 135, 6: 255, 12: 450 }, bypass: { 1: 100, 3: 270, 6: 510, 12: 900 } } },
-      { code: 'family', title: 'Семейный', base_devices: 7, device_steps: [7, 14, 21],
-        prices: { plain: { 1: 199, 3: 539, 6: 999, 12: 1790 }, bypass: { 1: 399, 3: 1079, 6: 1990, 12: 3590 } } }
+      { code: 'economy', title: 'Эконом', blurb: 'Две страны, без обхода БС', base_devices: 2, device_steps: [2, 4],
+        servers: 'lite', traffic_gb: 100, bypass_options: [false],
+        prices: { plain: { 1: 49, 3: 129, 6: 249, 12: 439 }, bypass: null } },
+      { code: 'standard', title: 'Стандарт', blurb: 'Все страны и «Авто»', base_devices: 3, device_steps: [3, 6, 9],
+        servers: 'all', traffic_gb: 0, bypass_options: [false, true],
+        prices: { plain: { 1: 99, 3: 269, 6: 499, 12: 890 }, bypass: { 1: 179, 3: 479, 6: 909, 12: 1590 } } },
+      { code: 'family', title: 'Семейный', blurb: 'Телефоны, ноутбуки и ТВ всей семьи', base_devices: 7, device_steps: [7, 14, 21],
+        servers: 'all', traffic_gb: 0, bypass_options: [false, true],
+        prices: { plain: { 1: 199, 3: 539, 6: 999, 12: 1790 }, bypass: { 1: 399, 3: 1079, 6: 1990, 12: 3590 } } },
+      { code: 'vip', title: 'VIP', blurb: 'Всё включено, поддержка вне очереди', base_devices: 5, device_steps: [5, 10],
+        servers: 'all', traffic_gb: 0, bypass_options: [true],
+        prices: { plain: null, bypass: { 1: 399, 3: 1079, 6: 1990, 12: 3590 } } }
     ]
   };
   function demoData(key) {
@@ -589,7 +597,7 @@
       ['Интернет работает только для «разрешённых» сайтов',
         '<p>Так выглядят <b>белые списки</b>: ВК, Госуслуги и Яндекс открываются, остальное нет. Чаще всего это мобильный интернет.</p>' +
         (noBypass()
-          ? '<p>В вашем тарифе нет обхода белых списков. Его можно включить: «Купить подписку», переключатель <b>«Обход белых списков»</b>.</p>'
+          ? '<p>В вашем тарифе нет обхода белых списков. Его можно добавить: «Купить подписку», тариф с <b>обходом белых списков</b>.</p>'
           : '<p>Выберите в Happ сервер <span class="chip-server">🇵🇱 Обход БС</span> или <span class="chip-server">LTE ОСНОВНАЯ</span>. Они работают через российский адрес, который оператор пропускает.</p><p>Если подписка не добавляется в Happ, используйте <b>резервную ссылку</b> из профиля.</p>')],
       ['Сколько устройств можно подключить?',
         limit ? '<p>До <b>' + esc(limit) + ' ' + plural(limit, ['устройства', 'устройств', 'устройств']) + '</b> на одну подписку. Подключить ещё одно: вкладка «Настройка», кнопка «Установить на другом устройстве».</p>'
@@ -662,13 +670,23 @@
   // ------------------------------------------------------------ tariffs
   function catalog() { return (state.data && state.data.plans) || DEMO_PLANS; }
   function planOf(code) { return catalog().plans.find((p) => p.code === code) || catalog().plans[0]; }
-  function planPrice(p, bypass, devices, months) {
-    return p.prices[bypass ? 'bypass' : 'plain'][months] * (devices / p.base_devices);
+  // plans that offer only one side of the bypass switch use it whatever the switch says
+  function bypassFor(p, want) {
+    const o = p.bypass_options || [false, true];
+    return o.indexOf(!!want) >= 0 ? !!want : o[0];
   }
+  function bypassChoice(p) { return (p.bypass_options || [false, true]).length > 1; }
+  function planPrice(p, bypass, devices, months) {
+    return p.prices[bypassFor(p, bypass) ? 'bypass' : 'plain'][months] * (devices / p.base_devices);
+  }
+  function planIcon(code) { return { family: 'home', standard: 'laptop', vip: 'spark' }[code] || 'phone'; }
   function minPrice() { return Math.min.apply(null, catalog().plans.map((p) => planPrice(p, false, p.base_devices, 1))); }
   function devWord(n) { return n + ' ' + plural(n, ['устройство', 'устройства', 'устройств']); }
   function monthWord(n) { return n + ' ' + plural(n, ['месяц', 'месяца', 'месяцев']); }
-  function tariffName(t) { return t.title + (t.code !== 'trial' && t.bypass ? ' + обход БС' : ''); }
+  function tariffName(t) {
+    const p = catalog().plans.find((c) => c.code === t.code);
+    return t.title + (t.bypass && p && bypassChoice(p) ? ' + обход БС' : '');
+  }
   function noBypass() { const t = vm().tariff; return !!(t && !t.bypass); }
 
   function openPlans() {
@@ -690,6 +708,7 @@
     if (sh.stage === 'pay') return payStage(sh);
     if (sh.stage === 'done') return paidStage(sh);
     const p = planOf(sh.plan);
+    const bypass = bypassFor(p, sh.bypass);
     const total = planPrice(p, sh.bypass, sh.devices, sh.months);
     const full = planPrice(p, sh.bypass, sh.devices, 1) * sh.months;
     const bypassExtra = planPrice(p, true, sh.devices, 1) - planPrice(p, false, sh.devices, 1);
@@ -700,21 +719,34 @@
       '<h1 class="h-display">Выберите тариф</h1>' +
       '<p class="lead">Цена за весь срок, без автосписаний. Ссылка в Happ останется той же.</p>';
 
+    // with the switch hidden, the other cards show their prices without the bypass
+    const cardBypass = bypassChoice(p) ? sh.bypass : false;
     html += '<div class="plans" role="radiogroup" aria-label="Тариф">' + catalog().plans.map((pl) => {
       const on = pl.code === sh.plan;
-      const blurb = pl.code === 'family' ? 'Для всей семьи: телефоны, ноутбуки, ТВ' : 'Телефон и компьютер';
-      return '<button class="plan" role="radio" aria-checked="' + on + '" data-act="plan-pick" data-plan="' + esc(pl.code) + '">' +
-        '<span class="ico">' + ic(pl.code === 'family' ? 'home' : 'phone') + '</span>' +
-        '<b>' + esc(pl.title) + '</b><span>' + esc(blurb) + '</span>' +
-        '<span class="plan-meta">' + devWord(pl.base_devices) + '</span>' +
-        '<span class="plan-price">' + money(planPrice(pl, sh.bypass, pl.base_devices, 1)) + '<small>/мес</small></span>' +
+      return '<button class="plan' + (pl.code === 'vip' ? ' vip' : '') + '" role="radio" aria-checked="' + on + '" data-act="plan-pick" data-plan="' + esc(pl.code) + '">' +
+        '<span class="ico">' + ic(planIcon(pl.code)) + '</span>' +
+        '<b>' + esc(pl.title) + '</b><span>' + esc(pl.blurb || '') + '</span>' +
+        '<span class="plan-meta">' + devWord(pl.base_devices) + (pl.traffic_gb ? ' · ' + pl.traffic_gb + ' ГБ' : '') + '</span>' +
+        '<span class="plan-price">' + money(planPrice(pl, cardBypass, pl.base_devices, 1)) + '<small>/мес</small></span>' +
         '<i class="radio" aria-hidden="true"></i></button>';
     }).join('') + '</div>';
 
-    html += '<button class="switch-row" role="switch" aria-checked="' + sh.bypass + '" data-act="plan-bypass">' +
-      '<span class="ico">' + ic('signal') + '</span>' +
-      '<span class="txt"><b>Обход белых списков</b><span>Нужен, если мобильный интернет пускает только на «разрешённые» сайты. Добавляет серверы LTE ОСНОВНАЯ.</span></span>' +
-      '<span class="side"><span class="extra">+' + money(bypassExtra) + '/мес</span><i class="knob" aria-hidden="true"></i></span></button>';
+    if (bypassChoice(p)) {
+      html += '<button class="switch-row" role="switch" aria-checked="' + bypass + '" data-act="plan-bypass">' +
+        '<span class="ico">' + ic('signal') + '</span>' +
+        '<span class="txt"><b>Обход белых списков</b><span>Нужен, если мобильный интернет пускает только на «разрешённые» сайты. Добавляет серверы LTE ОСНОВНАЯ.</span></span>' +
+        '<span class="side"><span class="extra">+' + money(bypassExtra) + '/мес</span><i class="knob" aria-hidden="true"></i></span></button>';
+    } else {
+      html += '<div class="switch-row fixed">' + '<span class="ico">' + ic(bypass ? 'check' : 'signal') + '</span>' +
+        '<span class="txt"><b>' + (bypass ? 'Обход белых списков включён' : 'Без обхода белых списков') + '</b><span>' +
+        (bypass ? 'Серверы LTE ОСНОВНАЯ для мобильного интернета с белыми списками уже в тарифе.'
+          : 'Нужен обход? Он есть в тарифах Стандарт, Семейный и VIP.') + '</span></span></div>';
+    }
+    if (p.servers === 'lite' || p.traffic_gb) {
+      html += '<div class="hint">' + ic('info') + '<span>' +
+        (p.servers === 'lite' ? 'Две страны на выбор, без «⚡ Авто». ' : '') +
+        (p.traffic_gb ? p.traffic_gb + ' ГБ трафика в месяц на всю подписку, лимит обновляется каждый месяц.' : '') + '</span></div>';
+    }
 
     html += '<h2 class="h-section">Сколько устройств</h2><div class="chips dev-chips" role="radiogroup" aria-label="Устройства">' + p.device_steps.map((n) =>
       '<button class="chip" role="radio" aria-checked="' + (n === sh.devices) + '" data-act="plan-devices" data-n="' + n + '">' +
@@ -733,14 +765,14 @@
     let note = '';
     if (!t && vm().active && s.expire_at) {
       note = 'Сейчас у вас прежний тариф, он работает без изменений до ' + fmtDate(s.expire_at) + '. Новый тариф включится после этой даты, оплаченные дни добавятся к ней.';
-    } else if (t && t.code === sh.plan && !!t.bypass === sh.bypass && s.expire_at && vm().active) {
+    } else if (t && t.code === sh.plan && !!t.bypass === bypass && s.expire_at && vm().active) {
       note = 'Дни добавятся к текущей подписке, она действует до ' + fmtDate(s.expire_at) + '.';
     } else if (t && t.code !== 'trial' && vm().active) {
       note = 'Это смена тарифа: новый срок начнётся с оплаты, а оставшиеся дни текущего тарифа пересчитаем по стоимости и добавим.';
     }
 
     html += '<div class="summary">' +
-      '<div class="sum-line"><span>' + esc(p.title) + (sh.bypass ? ' + обход БС' : '') + ' · ' + devWord(sh.devices) + ' · ' + monthWord(sh.months) + '</span></div>' +
+      '<div class="sum-line"><span>' + esc(p.title) + (bypass && bypassChoice(p) ? ' + обход БС' : '') + ' · ' + devWord(sh.devices) + ' · ' + monthWord(sh.months) + '</span></div>' +
       '<div class="sum-total"><span>Итого</span><b>' + money(total) + '</b></div>' +
       (full > total ? '<div class="sum-save">Экономия ' + money(full - total) + ' по сравнению с помесячной оплатой</div>' : '') +
       '</div>' +
@@ -776,7 +808,7 @@
     // old-tariff users keep their tariff until it runs out; the new one starts then
     const later = !v.tariff && sh.switchAt && new Date(sh.switchAt).getTime() > Date.now();
     const what = later
-      ? 'Тариф «' + p.title + (sh.bypass ? ' + обход БС' : '') + '», ' + devWord(sh.devices) + ', включится ' + fmtDate(sh.switchAt) + '. До этого всё работает как сейчас. '
+      ? 'Тариф «' + p.title + (bypassFor(p, sh.bypass) && bypassChoice(p) ? ' + обход БС' : '') + '», ' + devWord(sh.devices) + ', включится ' + fmtDate(sh.switchAt) + '. До этого всё работает как сейчас. '
       : (v.tariff ? tariffName(v.tariff) + ', ' + devWord(v.tariff.devices) + '. ' : '');
     return '<div class="sheet-top"><span style="width:40px"></span><span class="title"></span><button class="iconbtn" aria-label="Закрыть" data-act="close">' + ic('close', 'sm') + '</button></div>' +
       '<div class="step-body enter"><div class="welcome-art"><div class="gate" data-tone="ok"><i class="ring r1"></i><i class="ring r2"></i><i class="ring r3"></i><div class="core">' + ic('check') + '</div></div></div>' +
@@ -807,7 +839,7 @@
       const res = await fetch(new URL('api/pay', location.href), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ initData: state.tg.initData, plan: sh.plan, bypass: sh.bypass, devices: sh.devices, months: sh.months, method: sh.method })
+        body: JSON.stringify({ initData: state.tg.initData, plan: sh.plan, bypass: bypassFor(planOf(sh.plan), sh.bypass), devices: sh.devices, months: sh.months, method: sh.method })
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok || !body.pay_url) throw new Error(body.error || String(res.status));
@@ -888,7 +920,7 @@
         '<div class="step-art">' + ic('power') + '</div>' +
         '<ol class="orderlist"><li><span>Откройте <b>Happ</b>.</span></li><li><span>Нажмите <b>большую кнопку</b> в центре экрана. Сервер выбирается автоматически.</span></li><li><span>' + esc(p.allow) + '</span></li></ol>' +
         (noBypass()
-          ? '<div class="hint">' + ic('signal') + '<span>Мобильный интернет пускает только на «разрешённые» сайты? Это белые списки. Обход можно добавить к тарифу: «Купить подписку», переключатель «Обход белых списков».</span></div>'
+          ? '<div class="hint">' + ic('signal') + '<span>Мобильный интернет пускает только на «разрешённые» сайты? Это белые списки. Обход можно добавить: «Купить подписку», тариф с обходом белых списков.</span></div>'
           : '<div class="hint warn">' + ic('signal') + '<span>Мобильный интернет пускает только на «разрешённые» сайты? Выберите в списке серверов <span class="chip-server">🇵🇱 Обход БС</span>.</span></div>');
       foot = '<button class="btn primary" data-act="next">Подключилось</button><button class="btn ghost small" data-act="tab-help">Не получается</button>';
     } else {
@@ -1050,7 +1082,7 @@
         haptic('light'); renderSheet(); break;
       }
       case 'plan-bypass':
-        state.sheet.bypass = !state.sheet.bypass; haptic('light'); renderSheet(); break;
+        state.sheet.bypass = !bypassFor(planOf(state.sheet.plan), state.sheet.bypass); haptic('light'); renderSheet(); break;
       case 'plan-devices':
         state.sheet.devices = Number(t.dataset.n); haptic('light'); renderSheet(); break;
       case 'plan-months':
@@ -1067,7 +1099,7 @@
         if (!state.data.tariff && vm().active) {
           state.data.subscription = Object.assign({}, cur, { expire_at: new Date(new Date(cur.expire_at).getTime() + days).toISOString() });
         } else {
-          state.data.tariff = { code: p.code, title: p.title, bypass: sh.bypass, devices: sh.devices };
+          state.data.tariff = { code: p.code, title: p.title, bypass: bypassFor(p, sh.bypass), devices: sh.devices, traffic_gb: p.traffic_gb };
           state.data.subscription = Object.assign({}, cur, { status: 'active', is_trial: false, device_limit: sh.devices,
             expire_at: new Date(Date.now() + days).toISOString() });
         }

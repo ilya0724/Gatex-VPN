@@ -229,7 +229,7 @@ async def test_pay_goes_through_the_bot_for_new_tariffs(aiohttp_client, aiohttp_
         me = await (await c.post("/api/me", json={"initData": init_data()})).json()
         assert me["tariff"]["code"] == "trial"
         assert me["subscription"]["is_trial"] is True
-        assert [p["code"] for p in me["plans"]["plans"]] == ["eco", "family"]
+        assert [p["code"] for p in me["plans"]["plans"]] == ["economy", "standard", "family", "vip"]
 
         order = {"initData": init_data(), "plan": "family", "bypass": True, "devices": 7, "months": 3, "method": "sbp"}
         r = await c.post("/api/pay", json=order)
@@ -252,6 +252,17 @@ async def test_pay_goes_through_the_bot_for_new_tariffs(aiohttp_client, aiohttp_
         assert me["tariff"] is None and me["plans"]["plans"]
         r = await c.post("/api/pay", json=order)
         assert r.status == 200 and len(seen) == 2
+
+        # the old 50 ₽ plan is renewable only by people already on it
+        legacy = {**order, "plan": "eco", "bypass": False, "devices": 2}
+        r = await c.post("/api/pay", json=legacy)
+        assert r.status == 400 and len(seen) == 2
+        fake.users[0]["tag"] = "ECO"
+        application["cache"].clear()
+        me = await (await c.post("/api/me", json={"initData": init_data()})).json()
+        assert me["tariff"]["code"] == "eco" and "eco" in [p["code"] for p in me["plans"]["plans"]]
+        r = await c.post("/api/pay", json=legacy)
+        assert r.status == 200 and seen[-1]["plan"] == "eco"
     finally:
         await session.close()
 

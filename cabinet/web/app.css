@@ -369,6 +369,8 @@ body.has-sheet .demo-bar { display: none; }
 .switch-row .knob { position: relative; width: 46px; height: 28px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--line); transition: background 0.15s; }
 .switch-row .knob::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--muted); transition: transform 0.18s ease, background 0.15s; }
 .switch-row[aria-checked="true"] { border-color: var(--accent); }
+.switch-row.fixed { cursor: default; }
+.plan.vip .ico { background: linear-gradient(135deg, #f5c96a, #d99a2b); color: #2b1a00; }
 .switch-row[aria-checked="true"] .knob { background: var(--accent); border-color: transparent; }
 .switch-row[aria-checked="true"] .knob::after { transform: translateX(18px); background: var(--accent-ink); }
 .switch-row[aria-checked="true"] .extra { color: var(--accent); }
