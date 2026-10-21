@@ -29,7 +29,7 @@ PLANS = {
         "base_devices": 2,
         "device_steps": (2, 4),
         "servers": "lite",
-        "traffic_gb": 100,
+        "traffic_gb": 0,
         # price of one device pack for the whole period, by bypass and months;
         # a missing bypass key means the plan does not offer that option
         "prices": {

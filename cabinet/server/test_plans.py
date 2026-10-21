@@ -28,7 +28,7 @@ def test_make_order_validates_untrusted_input():
                      "days": 180, "amount": 3980, "tag": "FAMILY_BS",
                      "servers": "all", "traffic_gb": 0}
     assert plans.make_order("economy", False, 2, 1)["servers"] == "lite"
-    assert plans.make_order("economy", False, 2, 1)["traffic_gb"] == 100
+    assert plans.make_order("economy", False, 2, 1)["traffic_gb"] == 0
     with pytest.raises(ValueError):
         plans.make_order("standard", "yes", 3, 1)
     with pytest.raises(ValueError):
@@ -70,7 +70,7 @@ def test_tags_round_trip():
     assert plans.tariff_from_tag("ECO_BS", 4) == {"code": "eco", "title": "Стандарт", "bypass": True,
                                                   "devices": 4, "traffic_gb": 0}
     assert plans.tariff_from_tag("VIP")["code"] == "vip"
-    assert plans.tariff_from_tag("ECONOMY")["traffic_gb"] == 100
+    assert plans.tariff_from_tag("ECONOMY")["traffic_gb"] == 0
     assert plans.tariff_from_tag("TRIAL")["code"] == "trial"
     assert plans.tariff_from_tag("SOMETHING_OLD") is None
     assert plans.tariff_from_tag(None) is None

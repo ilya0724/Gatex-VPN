@@ -184,7 +184,7 @@
     months: [{ months: 1, discount: 0 }, { months: 3, discount: 10 }, { months: 6, discount: 15 }, { months: 12, discount: 25 }],
     plans: [
       { code: 'economy', title: 'Эконом', blurb: 'Две страны, без обхода БС', base_devices: 2, device_steps: [2, 4],
-        servers: 'lite', traffic_gb: 100, bypass_options: [false],
+        servers: 'lite', traffic_gb: 0, bypass_options: [false],
         prices: { plain: { 1: 49, 3: 129, 6: 249, 12: 439 }, bypass: null } },
       { code: 'standard', title: 'Стандарт', blurb: 'Все страны и «Авто»', base_devices: 3, device_steps: [3, 6, 9],
         servers: 'all', traffic_gb: 0, bypass_options: [false, true],
