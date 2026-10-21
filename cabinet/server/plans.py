@@ -13,8 +13,7 @@ price per pack. The plan is stored as the Remnawave user tag; users without
 one of these tags are on the old tariffs: they keep them until their
 subscription ends, and a purchase switches them to the new tariff then.
 
-Legacy plans are no longer sold to new buyers: only someone already on that
-plan sees it in the catalog and can renew it at the old price.
+The 17.10 tags ECO and ECO_BS are gone: nobody had bought them.
 """
 
 from __future__ import annotations
@@ -71,20 +70,6 @@ PLANS = {
             True: {1: 399, 3: 1079, 6: 1990, 12: 3590},
         },
     },
-    # the 17.10 «Эконом»: every country for 50 ₽; kept for people already on it
-    "eco": {
-        "title": "Стандарт",
-        "blurb": "Ваш тариф по прежней цене",
-        "legacy": True,
-        "base_devices": 2,
-        "device_steps": (2, 4, 6, 8),
-        "servers": "all",
-        "traffic_gb": 0,
-        "prices": {
-            False: {1: 50, 3: 135, 6: 255, 12: 450},
-            True: {1: 100, 3: 270, 6: 510, 12: 900},
-        },
-    },
 }
 
 TRIAL = {"days": 3, "devices": 2, "bypass": True, "tag": "TRIAL"}
@@ -96,20 +81,12 @@ TAGS = {
     ("family", False): "FAMILY",
     ("family", True): "FAMILY_BS",
     ("vip", True): "VIP",
-    ("eco", False): "ECO",
-    ("eco", True): "ECO_BS",
 }
 NEW_FLOW_TAGS = frozenset(TAGS.values()) | {TRIAL["tag"]}
 
 
 def bypass_options(plan: str) -> tuple[bool, ...]:
     return tuple(sorted(PLANS[plan]["prices"]))
-
-
-def on_sale(plan: str, current: str | None = None) -> bool:
-    """Legacy plans can only be renewed by someone already on them."""
-    p = PLANS.get(plan)
-    return p is not None and (not p.get("legacy") or plan == current)
 
 
 def price(plan: str, bypass: bool, devices: int, months: int) -> int:
@@ -126,12 +103,8 @@ def price(plan: str, bypass: bool, devices: int, months: int) -> int:
     return p["prices"][bool(bypass)][months] * (devices // p["base_devices"])
 
 
-def make_order(plan, bypass, devices, months, current: str | None = None) -> dict:
-    """Validated order from untrusted input.
-
-    current is the buyer's plan code from their panel tag (None for old-tariff
-    users and trials); it only matters for renewing a legacy plan.
-    """
+def make_order(plan, bypass, devices, months) -> dict:
+    """Validated order from untrusted input."""
     try:
         devices, months = int(devices), int(months)
     except (TypeError, ValueError):
@@ -139,8 +112,6 @@ def make_order(plan, bypass, devices, months, current: str | None = None) -> dic
     if not isinstance(bypass, bool):
         raise ValueError("bad bypass flag")
     plan = str(plan)
-    if not on_sale(plan, current):
-        raise ValueError("plan not on sale")
     amount = price(plan, bypass, devices, months)
     p = PLANS[plan]
     return {
@@ -180,7 +151,7 @@ def tariff_from_tag(tag: str | None, device_limit: int | None = None) -> dict | 
     return None
 
 
-def catalog(current: str | None = None) -> dict:
+def catalog() -> dict:
     """What the purchase screen needs, JSON-ready."""
     return {
         "months": [{"months": m, "discount": DISCOUNTS[m]} for m in MONTHS],
@@ -188,12 +159,11 @@ def catalog(current: str | None = None) -> dict:
             "code": code,
             "title": p["title"],
             "blurb": p["blurb"],
-            "legacy": bool(p.get("legacy")),
             "base_devices": p["base_devices"],
             "device_steps": list(p["device_steps"]),
             "servers": p["servers"],
             "traffic_gb": p["traffic_gb"],
             "bypass_options": list(bypass_options(code)),
             "prices": {"plain": p["prices"].get(False), "bypass": p["prices"].get(True)},
-        } for code, p in PLANS.items() if on_sale(code, current)],
+        } for code, p in PLANS.items()],
     }

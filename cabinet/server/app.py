@@ -391,7 +391,7 @@ async def handle_me(request: web.Request) -> web.Response:
         # null tariff: an old-tariff user; a purchase starts the new tariff
         # when their current subscription ends (the bot handles that)
         "tariff": entry["tariff"],
-        "plans": plans.catalog((entry["tariff"] or {}).get("code")),
+        "plans": plans.catalog(),
     })
 
 
@@ -537,17 +537,9 @@ async def handle_pay(request: web.Request) -> web.Response:
     if not init:
         return json_response({"error": "unauthorized"}, 401)
     tg_id = int(init["user"]["id"])
-    current = None
-    if plans.PLANS.get(str(body.get("plan")), {}).get("legacy"):
-        # only someone already on a legacy plan may renew it
-        try:
-            current = ((await _load(request, tg_id))["tariff"] or {}).get("code")
-        except Exception:
-            log.exception("panel lookup failed for %s", tg_id)
-            return json_response({"error": "panel_unavailable"}, 502)
     try:
         order = plans.make_order(body.get("plan"), body.get("bypass"),
-                                 body.get("devices"), body.get("months"), current)
+                                 body.get("devices"), body.get("months"))
     except ValueError:
         return json_response({"error": "bad_order"}, 400)
     method = body.get("method")

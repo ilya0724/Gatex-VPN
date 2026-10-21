@@ -8,14 +8,13 @@ def test_prices_match_the_grid():
     assert plans.price("economy", False, 4, 12) == 2 * 439
     assert plans.price("standard", True, 6, 1) == 2 * 179
     assert plans.price("vip", True, 5, 3) == 1079
-    assert plans.price("eco", True, 8, 1) == 400
     assert plans.price("family", True, 7, 3) == 1079
     assert plans.price("family", False, 21, 12) == 3 * 1790
 
 
 @pytest.mark.parametrize("args", [
     ("gold", False, 2, 1), ("economy", True, 2, 1), ("vip", False, 5, 1),
-    ("economy", False, 3, 1), ("standard", False, 2, 1), ("eco", False, 2, 2), ("family", True, 8, 1),
+    ("economy", False, 3, 1), ("standard", False, 2, 1), ("eco", False, 2, 1), ("standard", False, 3, 2), ("family", True, 8, 1),
 ])
 def test_price_rejects_what_is_not_on_sale(args):
     with pytest.raises(ValueError):
@@ -35,15 +34,8 @@ def test_make_order_validates_untrusted_input():
         plans.make_order("standard", False, None, 1)
 
 
-def test_legacy_plan_only_for_its_users():
-    with pytest.raises(ValueError):
-        plans.make_order("eco", False, 2, 1)
-    with pytest.raises(ValueError):
-        plans.make_order("eco", False, 2, 1, current="family")
-    assert plans.make_order("eco", False, 2, 1, current="eco")["amount"] == 50
-    codes = [p["code"] for p in plans.catalog()["plans"]]
-    assert codes == ["economy", "standard", "family", "vip"]
-    assert "eco" in [p["code"] for p in plans.catalog("eco")["plans"]]
+def test_catalog_order():
+    assert [p["code"] for p in plans.catalog()["plans"]] == ["economy", "standard", "family", "vip"]
 
 
 def test_catalog_lists_bypass_choices():
@@ -67,8 +59,9 @@ def test_every_tag_is_distinct_and_fits_remnawave():
 
 
 def test_tags_round_trip():
-    assert plans.tariff_from_tag("ECO_BS", 4) == {"code": "eco", "title": "Стандарт", "bypass": True,
-                                                  "devices": 4, "traffic_gb": 0}
+    assert plans.tariff_from_tag("STANDARD_BS", 6) == {"code": "standard", "title": "Стандарт", "bypass": True,
+                                                       "devices": 6, "traffic_gb": 0}
+    assert plans.tariff_from_tag("ECO") is None
     assert plans.tariff_from_tag("VIP")["code"] == "vip"
     assert plans.tariff_from_tag("ECONOMY")["traffic_gb"] == 0
     assert plans.tariff_from_tag("TRIAL")["code"] == "trial"
