@@ -288,7 +288,7 @@ async def test_referral_link_with_and_without_the_bot(aiohttp_client, aiohttp_se
             c = await aiohttp_client(application)
             r = await c.post("/api/referral", json={"initData": init_data()})
             assert r.status == 200
-            assert await r.json() == {"link": "https://t.me/gatexvpn_bot?start=ref42", "count": count, "bonus_percent": 25}
+            assert await r.json() == {"link": "https://t.me/gatexvpn_bot?start=ref42", "count": count, "bonus_days": 7}
             assert (await c.post("/api/referral", json={"initData": "bad"})).status == 401
     finally:
         await session.close()

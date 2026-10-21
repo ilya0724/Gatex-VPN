@@ -228,7 +228,7 @@
     tab: 'home',
     platform: 'android',
     confirmDevice: null,
-    ref: null, // {link, count, bonus_percent} from api/referral
+    ref: null, // {link, count, bonus_days} from api/referral
     busy: false,
     removed: null,
     sheet: null // {kind:'welcome'} | {kind:'wizard', platform, remote, step} | {kind:'devices', remote}
@@ -562,10 +562,11 @@
   function referralBlock() {
     const r = state.ref;
     if (!r) return '';
+    const days = r.bonus_days || 7;
     const share = 'https://t.me/share/url?url=' + encodeURIComponent(r.link) + '&text=' + encodeURIComponent('Пользуюсь GateX VPN, подключайся по моей ссылке');
     return '<h2 class="h-section">Пригласите друга</h2><div class="card accent">' +
-      '<div class="ref-head"><span class="brand-mark">' + ic('gift') + '</span><span><b>+' + esc(r.bonus_percent) + '% дней за каждую оплату друга</b>' +
-      '<span>Друг подключается по вашей ссылке, а вам начисляется ' + esc(r.bonus_percent) + '% от дней каждой его оплаты.</span></span></div>' +
+      '<div class="ref-head"><span class="brand-mark">' + ic('gift') + '</span><span><b>+' + esc(days) + ' ' + plural(days, ['день', 'дня', 'дней']) + ' вам и другу</b>' +
+      '<span>Друг впервые заходит в бот по вашей ссылке, и вы оба сразу получаете по ' + esc(days) + ' ' + plural(days, ['дню', 'дня', 'дней']) + ' подписки.</span></span></div>' +
       linkBox(r.link) +
       '<div class="btn-row"><button class="btn ghost small" data-act="copy" data-text="' + esc(r.link) + '" data-msg="Ссылка скопирована">' + ic('copy', 'sm') + '<span>Копировать</span></button>' +
       '<a class="btn primary small" href="' + esc(share) + '" data-link>' + ic('send', 'sm') + '<span>Поделиться</span></a></div>' +
@@ -1149,7 +1150,7 @@
   function startDemo(key) {
     state.demo = true; state.demoKey = key; state.error = null;
     state.data = demoData(key);
-    state.ref = { link: 'https://t.me/gatexvpn_bot?start=ref700123456', count: 2, bonus_percent: 25 };
+    state.ref = { link: 'https://t.me/gatexvpn_bot?start=ref700123456', count: 2, bonus_days: 7 };
     state.tab = 'home';
     state.sheet = DEMO_SCENARIOS[key].onboard ? { kind: 'welcome' } : null;
     render();

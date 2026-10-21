@@ -56,7 +56,7 @@ class Config:
     bot_me_url: str = ""
     bot_revoke_url: str = ""
     revoke_keys_on_delete: bool = True
-    referral_bonus_percent: int = 25
+    referral_bonus_days: int = 7
     web_dir: Path = field(default=WEB_DIR)
 
     @classmethod
@@ -85,7 +85,7 @@ class Config:
             bot_me_url=get("BOT_ME_URL"),
             bot_revoke_url=get("BOT_REVOKE_URL"),
             revoke_keys_on_delete=get("REVOKE_KEYS_ON_DELETE", "1").lower() not in ("0", "false", "no"),
-            referral_bonus_percent=int(get("REFERRAL_BONUS_PERCENT", "25") or 25),
+            referral_bonus_days=int(get("REFERRAL_BONUS_DAYS", "7") or 7),
             web_dir=Path(get("WEB_DIR") or WEB_DIR),
         )
 
@@ -581,7 +581,7 @@ async def handle_referral(request: web.Request) -> web.Response:
         return json_response({"error": "unauthorized"}, 401)
     tg_id = int(init["user"]["id"])
     out = {"link": f"https://t.me/{cfg.bot_username}?start=ref{tg_id}", "count": None,
-           "bonus_percent": cfg.referral_bonus_percent}
+           "bonus_days": cfg.referral_bonus_days}
     if cfg.bot_me_url:
         http: ClientSession = request.app["http"]
         try:
