@@ -183,9 +183,9 @@
   const DEMO_PLANS = {
     months: [{ months: 1, discount: 0 }, { months: 3, discount: 10 }, { months: 6, discount: 15 }, { months: 12, discount: 25 }],
     plans: [
-      { code: 'economy', title: 'Эконом', blurb: 'Две страны, без обхода БС', base_devices: 2, device_steps: [2, 4],
-        servers: 'lite', traffic_gb: 0, bypass_options: [false],
-        prices: { plain: { 1: 49, 3: 129, 6: 249, 12: 439 }, bypass: null } },
+      { code: 'economy', title: 'Эконом', blurb: 'Нидерланды и Германия', base_devices: 2, device_steps: [2, 4],
+        servers: 'lite', traffic_gb: 0, bypass_options: [false, true],
+        prices: { plain: { 1: 49, 3: 129, 6: 249, 12: 439 }, bypass: { 1: 99, 3: 269, 6: 499, 12: 890 } } },
       { code: 'standard', title: 'Стандарт', blurb: 'Все страны и «Авто»', base_devices: 3, device_steps: [3, 6, 9],
         servers: 'all', traffic_gb: 0, bypass_options: [false, true],
         prices: { plain: { 1: 99, 3: 269, 6: 499, 12: 890 }, bypass: { 1: 179, 3: 479, 6: 909, 12: 1590 } } },
@@ -740,7 +740,7 @@
       html += '<div class="switch-row fixed">' + '<span class="ico">' + ic(bypass ? 'check' : 'signal') + '</span>' +
         '<span class="txt"><b>' + (bypass ? 'Обход белых списков включён' : 'Без обхода белых списков') + '</b><span>' +
         (bypass ? 'Серверы LTE ОСНОВНАЯ для мобильного интернета с белыми списками уже в тарифе.'
-          : 'Нужен обход? Он есть в тарифах Стандарт, Семейный и VIP.') + '</span></span></div>';
+          : 'В этом тарифе обход белых списков не подключается.') + '</span></span></div>';
     }
     if (p.servers === 'lite' || p.traffic_gb) {
       html += '<div class="hint">' + ic('info') + '<span>' +

@@ -6,6 +6,7 @@ import plans
 def test_prices_match_the_grid():
     assert plans.price("economy", False, 2, 1) == 49
     assert plans.price("economy", False, 4, 12) == 2 * 439
+    assert plans.price("economy", True, 2, 1) == 99
     assert plans.price("standard", True, 6, 1) == 2 * 179
     assert plans.price("vip", True, 5, 3) == 1079
     assert plans.price("family", True, 7, 3) == 1079
@@ -13,7 +14,7 @@ def test_prices_match_the_grid():
 
 
 @pytest.mark.parametrize("args", [
-    ("gold", False, 2, 1), ("economy", True, 2, 1), ("vip", False, 5, 1),
+    ("gold", False, 2, 1), ("economy", True, 3, 1), ("vip", False, 5, 1),
     ("economy", False, 3, 1), ("standard", False, 2, 1), ("eco", False, 2, 1), ("standard", False, 3, 2), ("family", True, 8, 1),
 ])
 def test_price_rejects_what_is_not_on_sale(args):
@@ -40,8 +41,8 @@ def test_catalog_order():
 
 def test_catalog_lists_bypass_choices():
     by_code = {p["code"]: p for p in plans.catalog()["plans"]}
-    assert by_code["economy"]["bypass_options"] == [False]
-    assert by_code["economy"]["prices"]["bypass"] is None
+    assert by_code["economy"]["bypass_options"] == [False, True]
+    assert by_code["family"]["prices"]["bypass"][1] == 399
     assert by_code["vip"]["bypass_options"] == [True]
     assert by_code["standard"]["bypass_options"] == [False, True]
 

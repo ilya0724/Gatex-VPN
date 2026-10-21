@@ -24,7 +24,7 @@ DISCOUNTS = {1: 0, 3: 10, 6: 15, 12: 25}  # percent, roughly baked into PRICES
 PLANS = {
     "economy": {
         "title": "Эконом",
-        "blurb": "Две страны, без обхода БС",
+        "blurb": "Нидерланды и Германия",
         "base_devices": 2,
         "device_steps": (2, 4),
         "servers": "lite",
@@ -33,6 +33,7 @@ PLANS = {
         # a missing bypass key means the plan does not offer that option
         "prices": {
             False: {1: 49, 3: 129, 6: 249, 12: 439},
+            True: {1: 99, 3: 269, 6: 499, 12: 890},
         },
     },
     "standard": {
@@ -76,6 +77,7 @@ TRIAL = {"days": 3, "devices": 2, "bypass": True, "tag": "TRIAL"}
 
 TAGS = {
     ("economy", False): "ECONOMY",
+    ("economy", True): "ECONOMY_BS",
     ("standard", False): "STANDARD",
     ("standard", True): "STANDARD_BS",
     ("family", False): "FAMILY",
