@@ -566,7 +566,7 @@
     const share = 'https://t.me/share/url?url=' + encodeURIComponent(r.link) + '&text=' + encodeURIComponent('Пользуюсь GateX VPN, подключайся по моей ссылке');
     return '<h2 class="h-section">Пригласите друга</h2><div class="card accent">' +
       '<div class="ref-head"><span class="brand-mark">' + ic('gift') + '</span><span><b>+' + esc(days) + ' ' + plural(days, ['день', 'дня', 'дней']) + ' вам и другу</b>' +
-      '<span>Друг впервые заходит в бот по вашей ссылке, и вы оба сразу получаете по ' + esc(days) + ' ' + plural(days, ['дню', 'дня', 'дней']) + ' подписки.</span></span></div>' +
+      '<span>Друг приходит в бот по вашей ссылке, и когда он включает пробный период, вы оба получаете по ' + esc(days) + ' ' + plural(days, ['дню', 'дня', 'дней']) + ' подписки.</span></span></div>' +
       linkBox(r.link) +
       '<div class="btn-row"><button class="btn ghost small" data-act="copy" data-text="' + esc(r.link) + '" data-msg="Ссылка скопирована">' + ic('copy', 'sm') + '<span>Копировать</span></button>' +
       '<a class="btn primary small" href="' + esc(share) + '" data-link>' + ic('send', 'sm') + '<span>Поделиться</span></a></div>' +
