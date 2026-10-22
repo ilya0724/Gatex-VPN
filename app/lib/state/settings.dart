@@ -62,4 +62,8 @@ class Settings {
   }
 
   set dns(DnsPreset v) => _prefs.setString('set.dns', v.id);
+
+  /// Colour theme id: green, black or white.
+  String get theme => _prefs.getString('set.theme') ?? 'green';
+  set theme(String v) => _prefs.setString('set.theme', v);
 }

@@ -14,7 +14,7 @@ Color delayColor(int ms) => ms < 300
     ? GX.accent
     : ms < 800
     ? GX.warn
-    : const Color(0xFFFF8A5B);
+    : Color(0xFFFF8A5B);
 
 /// Signal-style bars plus the delay in ms, or a red "no answer".
 class PingIndicator extends StatelessWidget {
@@ -32,12 +32,12 @@ class PingIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!tested) {
       return testing
-          ? const SizedBox(
+          ? SizedBox(
               width: 14,
               height: 14,
               child: CircularProgressIndicator(strokeWidth: 2, color: GX.muted),
             )
-          : const SizedBox.shrink();
+          : SizedBox.shrink();
     }
     final value = ms;
     final color = value == null ? GX.danger : delayColor(value);
@@ -59,13 +59,13 @@ class PingIndicator extends StatelessWidget {
             12.5,
             weight: 700,
             color: color,
-          ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+          ).copyWith(fontFeatures: [FontFeature.tabularFigures()]),
         ),
-        const SizedBox(width: 8),
+        SizedBox(width: 8),
         for (var i = 0; i < 4; i++)
           AnimatedContainer(
             duration: Duration(milliseconds: 250 + i * 60),
-            margin: const EdgeInsets.only(left: 2),
+            margin: EdgeInsets.only(left: 2),
             width: 3.5,
             height: 5.0 + i * 3,
             decoration: BoxDecoration(
@@ -79,12 +79,13 @@ class PingIndicator extends StatelessWidget {
 }
 
 class TagChip extends StatelessWidget {
-  const TagChip(this.text, {super.key, this.color = GX.muted});
+  const TagChip(this.text, {super.key, this.color});
   final String text;
-  final Color color;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
+    final color = this.color ?? GX.muted;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
@@ -109,10 +110,13 @@ class AutoBadge extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0x552EE6A6), Color(0x1418B98A)],
+          colors: [
+            GX.accent.withValues(alpha: 0.33),
+            GX.accent2.withValues(alpha: 0.08),
+          ],
         ),
         border: Border.all(color: GX.accent.withValues(alpha: 0.4)),
       ),
@@ -153,6 +157,13 @@ class _ConnectButtonState extends State<ConnectButton>
     duration: const Duration(milliseconds: 600),
   );
 
+  /// One flash of light the moment the tunnel comes up.
+  late final _flash = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  );
+  bool _wasConnected = false;
+
   bool get _busy =>
       widget.state == VpnState.connecting ||
       widget.state == VpnState.disconnecting;
@@ -176,6 +187,8 @@ class _ConnectButtonState extends State<ConnectButton>
     } else {
       _spin.stop();
     }
+    if (_connected && !_wasConnected) _flash.forward(from: 0);
+    _wasConnected = _connected;
     if (_connected) {
       if (!_ripple.isAnimating) _ripple.repeat();
       _on.forward();
@@ -191,6 +204,7 @@ class _ConnectButtonState extends State<ConnectButton>
     _spin.dispose();
     _ripple.dispose();
     _on.dispose();
+    _flash.dispose();
     super.dispose();
   }
 
@@ -207,7 +221,7 @@ class _ConnectButtonState extends State<ConnectButton>
           width: size + 120,
           height: size + 120,
           child: AnimatedBuilder(
-            animation: Listenable.merge([_spin, _ripple, on]),
+            animation: Listenable.merge([_spin, _ripple, on, _flash]),
             builder: (context, _) {
               final t = on.value;
               return CustomPaint(
@@ -217,6 +231,7 @@ class _ConnectButtonState extends State<ConnectButton>
                   ripplesOn: _connected,
                   spin: _busy ? _spin.value : null,
                   on: t,
+                  flash: _flash.isAnimating ? _flash.value : 0,
                 ),
                 child: Center(
                   child: Container(
@@ -229,11 +244,13 @@ class _ConnectButtonState extends State<ConnectButton>
                         end: Alignment.bottomRight,
                         colors: [
                           Color.lerp(
-                            const Color(0xFF13302A),
-                            const Color(0xFF7CFBD2),
+                            GX.p.buttonOff[0],
+                            GX.p.light
+                                ? const Color(0xFF3FE0AE)
+                                : const Color(0xFF7CFBD2),
                             t,
                           )!,
-                          Color.lerp(const Color(0xFF0B1E19), GX.accent2, t)!,
+                          Color.lerp(GX.p.buttonOff[1], GX.accent2, t)!,
                         ],
                       ),
                       border: Border.all(
@@ -250,10 +267,12 @@ class _ConnectButtonState extends State<ConnectButton>
                           blurRadius: 30 + 40 * t,
                           spreadRadius: 2 + 6 * t,
                         ),
-                        const BoxShadow(
-                          color: Color(0x66000000),
+                        BoxShadow(
+                          color: GX.p.light
+                              ? const Color(0x1F0D1F19)
+                              : const Color(0x66000000),
                           blurRadius: 24,
-                          offset: Offset(0, 10),
+                          offset: const Offset(0, 10),
                         ),
                       ],
                     ),
@@ -280,7 +299,9 @@ class _RingsPainter extends CustomPainter {
     required this.ripplesOn,
     required this.spin,
     required this.on,
+    this.flash = 0,
   });
+  final double flash;
   final double core;
   final double ripple;
   final bool ripplesOn;
@@ -291,6 +312,30 @@ class _RingsPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final c = size.center(Offset.zero);
     final track = core + 16;
+
+    if (flash > 0) {
+      final e = Curves.easeOutCubic.transform(flash);
+      final r = core + 120 * e;
+      canvas.drawCircle(
+        c,
+        r,
+        Paint()
+          ..shader = RadialGradient(
+            colors: [
+              GX.accent.withValues(alpha: 0.45 * (1 - flash)),
+              GX.accent.withValues(alpha: 0),
+            ],
+          ).createShader(Rect.fromCircle(center: c, radius: r)),
+      );
+      canvas.drawCircle(
+        c,
+        core + 8 + 90 * e,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3 * (1 - flash) + 0.5
+          ..color = GX.accent.withValues(alpha: 0.8 * (1 - flash)),
+      );
+    }
 
     if (ripplesOn) {
       for (var i = 0; i < 3; i++) {

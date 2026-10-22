@@ -19,12 +19,6 @@ class ServersScreen extends StatefulWidget {
 
 class _ServersScreenState extends State<ServersScreen> {
   @override
-  void initState() {
-    super.initState();
-    if (widget.state.delays.isEmpty) widget.state.testDelays();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Серверы')),
@@ -54,6 +48,12 @@ class ServerList extends StatefulWidget {
 
 class _ServerListState extends State<ServerList> {
   bool _byPing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.state.delays.isEmpty) widget.state.testDelays();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -146,7 +146,7 @@ class _ServerListState extends State<ServerList> {
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           Text(s.transport, style: body(12, color: GX.muted)),
-          if (s.isLte) const TagChip('LTE', color: GX.warn),
+          if (s.isLte) TagChip('LTE', color: GX.warn),
           if (failure != null)
             Text(
               failure.summary,
@@ -270,7 +270,7 @@ class _Toolbar extends StatelessWidget {
           onPressed: state.testingDelays ? null : state.testDelays,
           style: IconButton.styleFrom(backgroundColor: GX.glassStrong),
           icon: state.testingDelays
-              ? const SizedBox(
+              ? SizedBox(
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(
@@ -278,7 +278,7 @@ class _Toolbar extends StatelessWidget {
                     color: GX.accent,
                   ),
                 )
-              : const Icon(Icons.speed_rounded, color: GX.accent),
+              : Icon(Icons.speed_rounded, color: GX.accent),
         ),
       ],
     );
@@ -349,7 +349,7 @@ class _ServerCard extends StatelessWidget {
           AnimatedOpacity(
             opacity: selected ? 1 : 0,
             duration: const Duration(milliseconds: 200),
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.only(left: 6),
               child: Icon(
                 Icons.check_circle_rounded,

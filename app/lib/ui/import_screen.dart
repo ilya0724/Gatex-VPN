@@ -61,7 +61,17 @@ class _ImportScreenState extends State<ImportScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: _staggered([
                   Center(
-                    child: Image.asset('assets/images/mark.png', height: 64),
+                    child: ValueListenableBuilder<bool>(
+                      valueListenable: IntroOverlay.finished,
+                      builder: (context, done, _) => Opacity(
+                        opacity: done ? 1 : 0,
+                        child: Image.asset(
+                          GX.mark,
+                          key: IntroOverlay.markKeyIfFlying,
+                          height: 64,
+                        ),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 32),
                   Text(
@@ -102,7 +112,7 @@ class _ImportScreenState extends State<ImportScreen> {
                   OutlinedButton(
                     onPressed: busy ? null : _add,
                     child: busy
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 20,
                             height: 20,
                             child: CircularProgressIndicator(

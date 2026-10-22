@@ -140,9 +140,18 @@ class DesktopCore implements VpnCore {
         '-timeout',
         '$timeoutMs',
       ]);
-      final ms = int.tryParse('${r.stdout}'.trim());
+      // Xray prints notices (e.g. "WebSocket is deprecated") to stdout
+      // before its log settings apply, so the delay is the last bare number.
+      final numbers = RegExp(
+        r'^\s*(\d+)\s*$',
+        multiLine: true,
+      ).allMatches('${r.stdout}').toList();
+      final ms = numbers.isEmpty ? null : int.parse(numbers.last[1]!);
       if (r.exitCode == 0 && ms != null) return DelayResult.ok(ms);
-      final err = '${r.stderr}'.trim().replaceFirst(RegExp(r'^error:\s*'), '');
+      final err = '${r.stderr}\n${r.stdout}'.trim().replaceFirst(
+        RegExp(r'^error:\s*'),
+        '',
+      );
       return DelayResult.failed(err.isEmpty ? 'exit ${r.exitCode}' : err);
     } on ProcessException catch (e) {
       return DelayResult.failed(e.message);

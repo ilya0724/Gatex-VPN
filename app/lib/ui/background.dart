@@ -83,7 +83,7 @@ class _AuroraPainter extends CustomPainter {
     canvas.drawRect(
       rect,
       Paint()
-        ..shader = const LinearGradient(
+        ..shader = LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [GX.bg2, GX.bg],
@@ -107,14 +107,16 @@ class _AuroraPainter extends CustomPainter {
       );
     }
 
+    final glowColors = GX.p.glow;
+    final k = GX.p.light ? 2.4 : 1.0;
     blob(
       Offset(
         size.width * (0.15 + 0.12 * sin(t)),
         size.height * (0.02 + 0.06 * cos(t * 2)),
       ),
       d * (0.55 + 0.05 * sin(t * 3)),
-      GX.accent,
-      0.16 + 0.10 * g,
+      glowColors[0],
+      (0.16 + 0.10 * g) * k,
     );
     blob(
       Offset(
@@ -122,8 +124,8 @@ class _AuroraPainter extends CustomPainter {
         size.height * (0.38 + 0.08 * sin(t * 2)),
       ),
       d * 0.42,
-      const Color(0xFF18B9C9),
-      0.06 + 0.06 * g,
+      glowColors[1],
+      (0.06 + 0.06 * g) * k,
     );
     blob(
       Offset(
@@ -131,10 +133,36 @@ class _AuroraPainter extends CustomPainter {
         size.height * (1.02 + 0.04 * cos(t)),
       ),
       d * 0.5,
-      GX.accent2,
-      0.07 + 0.09 * g,
+      glowColors[2],
+      (0.07 + 0.09 * g) * k,
     );
+
+    // Slow specks of light drifting up, brighter while connected.
+    final dot = Paint();
+    for (final m in _motes) {
+      final y = (m.y - drift.value * m.speed) % 1.0;
+      final x = m.x + 0.012 * sin(t * 3 + m.phase);
+      final twinkle = 0.5 + 0.5 * sin(t * 7 + m.phase);
+      dot.color = GX.accent.withValues(
+        alpha: (0.10 + 0.25 * g) * twinkle * (GX.p.light ? 0.8 : 1),
+      );
+      canvas.drawCircle(Offset(x * size.width, y * size.height), m.r, dot);
+    }
   }
+
+  static final _motes = () {
+    final r = Random(7);
+    return [
+      for (var i = 0; i < 36; i++)
+        (
+          x: r.nextDouble(),
+          y: r.nextDouble(),
+          r: 0.6 + r.nextDouble() * 1.4,
+          speed: 1.0 + r.nextInt(3).toDouble(),
+          phase: r.nextDouble() * 2 * pi,
+        ),
+    ];
+  }();
 
   @override
   bool shouldRepaint(_AuroraPainter old) => false;

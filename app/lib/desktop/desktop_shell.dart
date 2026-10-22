@@ -134,6 +134,14 @@ class DesktopShell with WindowListener, TrayListener {
 
   Future<void> minimize() => windowManager.minimize();
 
+  Future<void> toggleMaximize() async {
+    if (await windowManager.isMaximized()) {
+      await windowManager.unmaximize();
+    } else {
+      await windowManager.maximize();
+    }
+  }
+
   /// The close button: to the tray, or quit when the user turned that off.
   Future<void> close() async {
     final s = _state;

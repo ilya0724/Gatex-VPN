@@ -16,6 +16,7 @@ import '../links.dart';
 import '../subscription/fetcher.dart';
 import '../subscription/server.dart';
 import '../subscription/subscription.dart';
+import '../ui/theme.dart' show GX;
 import 'diagnose.dart';
 import 'settings.dart';
 import 'updates.dart';
@@ -74,21 +75,50 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
+  /// What init is doing, shown if start-up hangs or fails.
+  String initStep = 'запуск';
+
+  /// Set when start-up failed; the app shows it instead of a blank screen.
+  String? startupError;
+
+  Future<T> _step<T>(String name, Future<T> Function() f) {
+    initStep = name;
+    return f().timeout(
+      const Duration(seconds: 8),
+      onTimeout: () => throw TimeoutException('$name: нет ответа 8 с'),
+    );
+  }
+
   Future<void> init(List<String> args) async {
-    _prefs = await SharedPreferences.getInstance();
+    try {
+      await _init(args);
+    } catch (e, st) {
+      startupError = '$initStep: $e\n$st';
+      ready = true;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _init(List<String> args) async {
+    _prefs = await _step('настройки', SharedPreferences.getInstance);
     settings = Settings(_prefs);
-    final dir = await getApplicationSupportDirectory();
+    final dir = await _step('папка данных', getApplicationSupportDirectory);
     await dir.create(recursive: true);
     _dataDir = dir.path;
-    final info = await PackageInfo.fromPlatform();
+    final info = await _step('версия', PackageInfo.fromPlatform);
     appVersion = info.version;
     device = DeviceInfo(
       appVersion: appVersion,
       hwid: _hwid(),
-      model: await _deviceModel(),
+      model: await _step('модель устройства', _deviceModel),
     );
+    initStep = 'подписка';
     _restore();
-    core.status.listen(_onStatus);
+    initStep = 'ядро';
+    core.status.listen(
+      _onStatus,
+      onError: (Object e) => log('$e', error: true),
+    );
     _app.setMethodCallHandler((call) async {
       switch (call.method) {
         case 'link':
@@ -103,7 +133,9 @@ class AppState extends ChangeNotifier {
     if (DesktopShell.supported) await DesktopShell.instance.attach(this);
 
     final initial = Platform.isAndroid
-        ? await _app.invokeMethod<String>('initialLink')
+        ? await _app
+              .invokeMethod<String>('initialLink')
+              .timeout(const Duration(seconds: 5), onTimeout: () => null)
         : args.firstWhere((a) => a.startsWith('gatex://'), orElse: () => '');
     if (initial != null && initial.isNotEmpty) {
       await handleLink(initial);
@@ -140,6 +172,13 @@ class AppState extends ChangeNotifier {
   }
 
   /// Saves a settings change and applies it to a running tunnel.
+  void setTheme(String id) {
+    settings.theme = id;
+    GX.use(id);
+    log('Тема: $id');
+    notifyListeners();
+  }
+
   Future<void> updateSettings(
     void Function(Settings s) change, {
     bool reconnect = false,

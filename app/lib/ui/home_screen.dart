@@ -96,49 +96,95 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Wide windows: the button on the left, the server list on the right.
   Widget _wide(BuildContext context) {
     final state = widget.state;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 8, 0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  _in(0, _TopBar(state: state)),
-                  ..._notices(1),
-                  const SizedBox(height: 24),
-                  _in(2, _ConnectBlock(state: state)),
-                  const SizedBox(height: 16),
-                  if (state.error != null) ...[
-                    _ErrorCard(state: state),
-                    const SizedBox(height: 12),
-                  ],
-                  _in(3, const _LinksRow()),
-                  const SizedBox(height: 16),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 420,
-            child: _in(
-              2,
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 18, 16, 4),
-                    child: Text('Серверы', style: display(18)),
+    return LayoutBuilder(
+      builder: (context, box) {
+        final panel = (box.maxWidth * 0.36).clamp(400.0, 540.0);
+        final button = (box.maxHeight * 0.30).clamp(170.0, 260.0);
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 16, 16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 640),
+                    child: LayoutBuilder(
+                      builder: (context, inner) => SingleChildScrollView(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minHeight: inner.maxHeight,
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                children: [
+                                  _in(0, _TopBar(state: state)),
+                                  ..._notices(1),
+                                ],
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                ),
+                                child: _in(
+                                  2,
+                                  _ConnectBlock(
+                                    state: state,
+                                    buttonSize: button,
+                                  ),
+                                ),
+                              ),
+                              Column(
+                                children: [
+                                  if (state.error != null) ...[
+                                    _ErrorCard(state: state),
+                                    const SizedBox(height: 12),
+                                  ],
+                                  _in(3, const _LinksRow()),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                  Expanded(child: ServerList(state: state)),
-                ],
+                ),
               ),
-            ),
+              const SizedBox(width: 20),
+              SizedBox(
+                width: panel,
+                child: FadeSlideIn(
+                  delay: _base + const Duration(milliseconds: 180),
+                  offset: const Offset(40, 0),
+                  duration: const Duration(milliseconds: 700),
+                  child: Container(
+                    margin: const EdgeInsets.only(top: 8),
+                    decoration: BoxDecoration(
+                      color: GX.glass,
+                      borderRadius: BorderRadius.circular(26),
+                      border: Border.all(color: GX.line),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 18, 16, 4),
+                          child: Text('Серверы', style: display(18)),
+                        ),
+                        Expanded(child: ServerList(state: state)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -158,7 +204,7 @@ class _HomeScreenState extends State<HomeScreen> {
           GlassCard(
             child: Row(
               children: [
-                const Icon(Icons.campaign_outlined, color: GX.accent),
+                Icon(Icons.campaign_outlined, color: GX.accent),
                 const SizedBox(width: 12),
                 Expanded(child: Text(sub.announce!, style: body(14))),
               ],
@@ -180,14 +226,24 @@ class _TopBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
-          Image.asset('assets/images/mark.png', height: 24),
+          ValueListenableBuilder<bool>(
+            valueListenable: IntroOverlay.finished,
+            builder: (context, done, _) => Opacity(
+              opacity: done ? 1 : 0,
+              child: Image.asset(
+                GX.mark,
+                key: IntroOverlay.markKeyIfFlying,
+                height: 24,
+              ),
+            ),
+          ),
           const SizedBox(width: 10),
           Text('GateX', style: display(19)),
           const Spacer(),
           AnimatedOpacity(
             opacity: state.refreshing ? 1 : 0,
             duration: const Duration(milliseconds: 250),
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.all(12),
               child: SizedBox(
                 width: 16,
@@ -327,8 +383,9 @@ class _PlanCard extends StatelessWidget {
 
 /// The button with the status and the session timer under it.
 class _ConnectBlock extends StatefulWidget {
-  const _ConnectBlock({required this.state});
+  const _ConnectBlock({required this.state, this.buttonSize = 188});
   final AppState state;
+  final double buttonSize;
 
   @override
   State<_ConnectBlock> createState() => _ConnectBlockState();
@@ -391,7 +448,11 @@ class _ConnectBlockState extends State<_ConnectBlock> {
     }
     return Column(
       children: [
-        ConnectButton(state: state.vpnState, onTap: state.toggle),
+        ConnectButton(
+          state: state.vpnState,
+          onTap: state.toggle,
+          size: widget.buttonSize,
+        ),
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
           transitionBuilder: (child, a) => FadeTransition(
@@ -467,7 +528,7 @@ class _ServerTile extends StatelessWidget {
               ms: state.delays[s.id],
             ),
           const SizedBox(width: 4),
-          const Icon(Icons.chevron_right_rounded, color: GX.muted),
+          Icon(Icons.chevron_right_rounded, color: GX.muted),
         ],
       ),
     );
@@ -491,7 +552,7 @@ class _ErrorCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Icon(Icons.error_outline_rounded, color: GX.danger, size: 20),
+            Icon(Icons.error_outline_rounded, color: GX.danger, size: 20),
             const SizedBox(width: 10),
             Expanded(child: Text(state.error!, style: body(14))),
             IconButton(
@@ -517,7 +578,7 @@ class _UpdateBanner extends StatelessWidget {
       onTap: () => openLink(u.url),
       child: Row(
         children: [
-          const Icon(Icons.system_update_rounded, color: GX.accent),
+          Icon(Icons.system_update_rounded, color: GX.accent),
           const SizedBox(width: 12),
           Expanded(
             child: Text(

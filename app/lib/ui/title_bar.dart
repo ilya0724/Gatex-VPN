@@ -24,9 +24,14 @@ class TitleBar extends StatelessWidget {
             onTap: DesktopShell.instance.minimize,
           ),
           _WindowButton(
+            icon: Icons.crop_square_rounded,
+            tooltip: 'Развернуть',
+            onTap: DesktopShell.instance.toggleMaximize,
+          ),
+          _WindowButton(
             icon: Icons.close_rounded,
             tooltip: 'Закрыть',
-            hover: const Color(0xFFE5484D),
+            hover: Color(0xFFE5484D),
             onTap: DesktopShell.instance.close,
           ),
         ],
@@ -40,12 +45,12 @@ class _WindowButton extends StatefulWidget {
     required this.icon,
     required this.tooltip,
     required this.onTap,
-    this.hover = GX.glassStrong,
+    this.hover,
   });
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
-  final Color hover;
+  final Color? hover;
 
   @override
   State<_WindowButton> createState() => _WindowButtonState();
@@ -65,7 +70,7 @@ class _WindowButtonState extends State<_WindowButton> {
           duration: const Duration(milliseconds: 120),
           width: 46,
           height: TitleBar.height,
-          color: _hover ? widget.hover : Colors.transparent,
+          color: _hover ? (widget.hover ?? GX.glassStrong) : Colors.transparent,
           child: Icon(
             widget.icon,
             size: 17,

@@ -69,6 +69,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                 children: [
+                  FadeSlideIn.staggered(
+                    index: i++,
+                    child: _ThemePicker(
+                      current: s.theme,
+                      onPick: state.setTheme,
+                    ),
+                  ),
                   section('Подключение', [
                     _SwitchRow(
                       icon: Icons.flash_on_rounded,
@@ -287,8 +294,7 @@ class _Section extends StatelessWidget {
             child: Column(
               children: [
                 for (var i = 0; i < children.length; i++) ...[
-                  if (i > 0)
-                    const Divider(height: 1, indent: 56, color: GX.line),
+                  if (i > 0) Divider(height: 1, indent: 56, color: GX.line),
                   children[i],
                 ],
               ],
@@ -372,8 +378,150 @@ class _NavRow extends StatelessWidget {
               child: Text(title, style: body(15, weight: 600, color: color)),
             ),
             if (value != null) Text(value!, style: body(13, color: GX.muted)),
-            if (!danger)
-              const Icon(Icons.chevron_right_rounded, color: GX.muted),
+            if (!danger) Icon(Icons.chevron_right_rounded, color: GX.muted),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Three cards that preview each colour theme.
+class _ThemePicker extends StatelessWidget {
+  const _ThemePicker({required this.current, required this.onPick});
+  final String current;
+  final ValueChanged<String> onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
+            child: Text(
+              'ОФОРМЛЕНИЕ',
+              style: body(
+                11.5,
+                weight: 800,
+                color: GX.muted,
+              ).copyWith(letterSpacing: 1.2),
+            ),
+          ),
+          Row(
+            children: [
+              for (final p in palettes) ...[
+                if (p != palettes.first) const SizedBox(width: 10),
+                Expanded(
+                  child: _Swatch(
+                    palette: p,
+                    selected: p.id == current,
+                    onTap: () => onPick(p.id),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Swatch extends StatelessWidget {
+  const _Swatch({
+    required this.palette,
+    required this.selected,
+    required this.onTap,
+  });
+  final Palette palette;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = palette;
+    return PressScale(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        height: 112,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: selected ? GX.accent : GX.line,
+            width: selected ? 2 : 1,
+          ),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [p.bg2, p.bg],
+          ),
+          boxShadow: [
+            if (selected)
+              BoxShadow(
+                color: GX.accent.withValues(alpha: 0.25),
+                blurRadius: 18,
+              ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              left: -20,
+              top: -30,
+              child: Container(
+                width: 90,
+                height: 90,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      p.glow[0].withValues(alpha: p.light ? 0.5 : 0.35),
+                      p.glow[0].withValues(alpha: 0),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Align(
+              alignment: const Alignment(0, -0.25),
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(colors: [p.accent, p.accent2]),
+                ),
+                child: Icon(
+                  Icons.power_settings_new_rounded,
+                  size: 20,
+                  color: p.accentInk,
+                ),
+              ),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 12,
+              child: Text(
+                p.name,
+                textAlign: TextAlign.center,
+                style: body(13, weight: 700, color: p.text),
+              ),
+            ),
+            if (selected)
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Icon(
+                  Icons.check_circle_rounded,
+                  size: 18,
+                  color: p.accent,
+                ),
+              ),
           ],
         ),
       ),
