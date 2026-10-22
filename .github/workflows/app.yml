@@ -37,8 +37,8 @@ jobs:
           GATEX_CORE: ${{ runner.temp }}/gatex-core
         run: |
           flutter pub get
-          flutter analyze
-          flutter test
+          ../.github/scripts/logged.sh analyze flutter analyze
+          ../.github/scripts/logged.sh test flutter test
 
   android:
     needs: test
@@ -56,13 +56,14 @@ jobs:
       - name: Build gatexcore.aar
         working-directory: core
         run: |
-          go install golang.org/x/mobile/cmd/gomobile@latest
-          go install golang.org/x/mobile/cmd/gobind@latest
-          go get golang.org/x/mobile/bind
+          log=../.github/scripts/logged.sh
+          $log gomobile-install go install golang.org/x/mobile/cmd/gomobile@latest golang.org/x/mobile/cmd/gobind@latest
+          $log mobile-bind-dep go get golang.org/x/mobile/bind
           export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
-          gomobile init
+          echo "NDK: $ANDROID_NDK_HOME"
+          $log gomobile-init gomobile init
           mkdir -p ../app/android/app/libs
-          gomobile bind -v -target=android/arm64,android/arm,android/amd64 \
+          $log gomobile-bind gomobile bind -target=android/arm64,android/arm,android/amd64 \
             -androidapi 24 -trimpath -ldflags="-s -w -buildid=" \
             -o ../app/android/app/libs/gatexcore.aar ./gatexcore
       - uses: subosito/flutter-action@v2
@@ -89,7 +90,7 @@ jobs:
       - name: Build APKs
         working-directory: app
         run: |
-          flutter build apk --release
+          ../.github/scripts/logged.sh apk flutter build apk --release
           mv build/app/outputs/flutter-apk/app-release.apk "$RUNNER_TEMP/GateX-universal.apk"
           flutter build apk --release --split-per-abi
           mkdir -p dist
@@ -118,7 +119,8 @@ jobs:
           cache: true
       - name: Build app
         working-directory: app
-        run: flutter build windows --release
+        shell: bash
+        run: ../.github/scripts/logged.sh windows-build flutter build windows --release
       - name: Add gatex-core and Wintun
         shell: pwsh
         run: |
@@ -165,7 +167,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
-          cd app && flutter build linux --release && cd ..
+          (cd app && ../.github/scripts/logged.sh linux-build flutter build linux --release)
           bundle=app/build/linux/x64/release/bundle
           (cd core && go build -trimpath -ldflags "-s -w" -o "../$bundle/gatex-core" ./cmd/gatex-core)
           version=$(sed -n 's/^version:[[:space:]]*\([0-9.]*\).*/\1/p' app/pubspec.yaml)
