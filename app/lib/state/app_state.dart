@@ -420,6 +420,9 @@ class AppState extends ChangeNotifier {
     return 'Не удалось подключиться: ${raw.split('\n').first}';
   }
 
+  /// Servers whose delay test is running right now.
+  final probing = <String>{};
+
   Future<void> testDelays() async {
     if (testingDelays || servers.isEmpty) return;
     testingDelays = true;
@@ -432,10 +435,13 @@ class AppState extends ChangeNotifier {
     Future<void> worker() async {
       while (queue.isNotEmpty) {
         final s = queue.removeAt(0);
+        probing.add(s.id);
+        notifyListeners();
         final logPath = '$_dataDir${Platform.pathSeparator}probe-${n++}.log';
         var r = await _probe(s, logPath, 6000);
         // A slow LTE route can miss the first window; give it one more go.
         if (r.ms == null) r = await _probe(s, logPath, 10000);
+        probing.remove(s.id);
         delays[s.id] = r.ms;
         if (r.ms == null) {
           final failure = DelayFailure.from(r.error ?? '');

@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'theme.dart';
 
@@ -18,8 +20,25 @@ class IntroOverlay extends StatefulWidget {
   static const handoff = Duration(milliseconds: 1500);
   static DateTime? _startedAt;
 
+  /// No intro this time: the last one never reached its end (the app was
+  /// killed or the phone could not draw it), so it must not be in the way.
+  static bool skip = false;
+  static SharedPreferences? _prefs;
+  static const _pendingKey = 'intro.pending';
+
+  static Future<void> prepare(SharedPreferences prefs) async {
+    _prefs = prefs;
+    skip = prefs.getBool(_pendingKey) ?? false;
+    if (skip) {
+      finished.value = true;
+    } else {
+      await prefs.setBool(_pendingKey, true);
+    }
+  }
+
   /// How long a screen built now should wait before animating in.
   static Duration get wait {
+    if (skip) return Duration.zero;
     final start = _startedAt;
     if (start == null) return handoff + const Duration(milliseconds: 250);
     final left = handoff - DateTime.now().difference(start);
@@ -43,7 +62,8 @@ class _IntroOverlayState extends State<IntroOverlay>
     vsync: this,
     duration: IntroOverlay._total,
   );
-  bool _done = false;
+  bool _done = IntroOverlay.skip;
+  Timer? _watchdog;
 
   /// The landing spot in this overlay's coordinates during the flight.
   Rect? _target;
@@ -51,7 +71,10 @@ class _IntroOverlayState extends State<IntroOverlay>
   @override
   void initState() {
     super.initState();
+    if (_done) return;
     _c.addListener(_maybeLockTarget);
+    // Whatever happens to the animation, the app shows up.
+    _watchdog = Timer(const Duration(seconds: 5), _finish);
     // Start once the window is up and drawing smoothly, not during the
     // first heavy frames, or the start of the animation is skipped.
     WidgetsBinding.instance.endOfFrame.then((_) async {
@@ -59,9 +82,16 @@ class _IntroOverlayState extends State<IntroOverlay>
       if (!mounted) return;
       IntroOverlay._startedAt = DateTime.now();
       await _c.forward();
-      IntroOverlay.finished.value = true;
-      if (mounted) setState(() => _done = true);
+      // Played to the end, so it is safe to play next time too.
+      unawaited(IntroOverlay._prefs?.setBool(IntroOverlay._pendingKey, false));
+      _finish();
     });
+  }
+
+  void _finish() {
+    _watchdog?.cancel();
+    IntroOverlay.finished.value = true;
+    if (mounted && !_done) setState(() => _done = true);
   }
 
   void _maybeLockTarget() {
@@ -98,6 +128,7 @@ class _IntroOverlayState extends State<IntroOverlay>
 
   @override
   void dispose() {
+    _watchdog?.cancel();
     _c.dispose();
     super.dispose();
   }

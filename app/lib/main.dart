@@ -15,8 +15,17 @@ import 'ui/title_bar.dart';
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
-  // The theme is needed for the very first frame.
-  GX.use((await SharedPreferences.getInstance()).getString('set.theme') ?? '');
+  // The theme is needed for the very first frame, but nothing here may
+  // keep that frame from being drawn.
+  try {
+    final prefs = await SharedPreferences.getInstance().timeout(
+      const Duration(seconds: 2),
+    );
+    GX.use(prefs.getString('set.theme') ?? '');
+    await IntroOverlay.prepare(prefs);
+  } on Object {
+    IntroOverlay.skip = true;
+  }
   if (DesktopShell.supported) await DesktopShell.instance.init(args);
   final state = AppState();
   runApp(GateXApp(state: state));

@@ -105,7 +105,7 @@ func MeasureDelay(configJSON string, probeURL string, timeoutMs int) (int, error
 	client := &http.Client{
 		Timeout: timeout,
 		Transport: &http.Transport{
-			DisableKeepAlives: true,
+			MaxIdleConnsPerHost: 1,
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				dest, err := xnet.ParseDestination(network + ":" + addr)
 				if err != nil {
@@ -115,11 +115,24 @@ func MeasureDelay(configJSON string, probeURL string, timeoutMs int) (int, error
 			},
 		},
 	}
-	// The first request pays for the handshake, which is what users feel
-	// when they connect, so it is the one we time.
+	get := func() error {
+		resp, err := client.Get(probeURL)
+		if err != nil {
+			return err
+		}
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode >= 500 {
+			return fmt.Errorf("probe answered %d", resp.StatusCode)
+		}
+		return nil
+	}
+	// The first request pays for the handshakes (to the server, then TLS
+	// to the probe host through it), several round trips that say little
+	// about the route. The second one rides the open connection, so it is
+	// one round trip through the server: the ping other clients show.
 	begin := time.Now()
-	resp, err := client.Get(probeURL)
-	if err != nil {
+	if err := get(); err != nil {
 		// The HTTP side often fails at once ("closed pipe") while Xray is
 		// still dialing; give the outbound time to log the real reason.
 		if wait := timeout - time.Since(begin); wait > 0 {
@@ -127,10 +140,10 @@ func MeasureDelay(configJSON string, probeURL string, timeoutMs int) (int, error
 		}
 		return -1, err
 	}
-	io.Copy(io.Discard, resp.Body)
-	resp.Body.Close()
-	if resp.StatusCode >= 500 {
-		return -1, fmt.Errorf("probe answered %d", resp.StatusCode)
+	cold := time.Since(begin)
+	begin = time.Now()
+	if err := get(); err != nil {
+		return int(cold.Milliseconds()), nil
 	}
 	return int(time.Since(begin).Milliseconds()), nil
 }

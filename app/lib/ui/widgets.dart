@@ -23,20 +23,27 @@ class PingIndicator extends StatelessWidget {
     required this.tested,
     this.ms,
     this.testing = false,
+    this.queued = false,
   });
   final bool tested;
   final int? ms;
+
+  /// This server is being tested now / waits for its turn.
   final bool testing;
+  final bool queued;
 
   @override
   Widget build(BuildContext context) {
     if (!tested) {
-      return testing
-          ? SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(strokeWidth: 2, color: GX.muted),
-            )
+      if (testing) {
+        return SizedBox(
+          width: 14,
+          height: 14,
+          child: CircularProgressIndicator(strokeWidth: 2, color: GX.muted),
+        );
+      }
+      return queued
+          ? Text('в очереди', style: body(12, color: GX.muted))
           : SizedBox.shrink();
     }
     final value = ms;

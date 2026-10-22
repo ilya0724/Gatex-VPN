@@ -257,7 +257,7 @@ Map<String, dynamic> _streamSettings(
       'serverName': sni ?? host,
       'fingerprint': ?fp,
       'alpn': ?alpn,
-      if (v('allowInsecure') == '1' || v('insecure') == '1')
+      if (_isOn(v('allowInsecure')) || _isOn(v('insecure')))
         'allowInsecure': true,
     };
   } else if (security == 'reality') {
@@ -272,6 +272,8 @@ Map<String, dynamic> _streamSettings(
   }
   return stream;
 }
+
+bool _isOn(String? v) => v == '1' || v?.toLowerCase() == 'true';
 
 /// Panels often list "h2,http/1.1" for every host. A WebSocket server
 /// that picks h2 then breaks the upgrade, and gRPC cannot run without h2,

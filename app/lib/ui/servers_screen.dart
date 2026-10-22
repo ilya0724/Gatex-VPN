@@ -160,7 +160,8 @@ class _ServerListState extends State<ServerList> {
           PingIndicator(
             tested: tested,
             ms: state.delays[s.id],
-            testing: state.testingDelays,
+            testing: state.probing.contains(s.id),
+            queued: state.testingDelays,
           ),
           if (failure != null)
             IconButton(
@@ -247,7 +248,7 @@ class _Toolbar extends StatelessWidget {
                 ? 'Проверяем серверы… ${state.delays.length} из ${state.servers.length}'
                 : state.delays.isEmpty
                 ? '${state.servers.length} серверов'
-                : 'Отвечают $ok из ${state.servers.length}',
+                : 'Отвечают $ok из ${state.servers.length} · пинг через сервер',
             style: body(13, color: GX.muted),
           ),
         ),
