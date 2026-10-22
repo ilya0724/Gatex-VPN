@@ -50,7 +50,12 @@ android {
         release {
             signingConfig = signingConfigs.findByName("release")
                 ?: signingConfigs.getByName("debug")
-            // gomobile's Java classes are called from Go by name over JNI.
+            // No R8: gomobile's classes and the plugins built on package:jni
+            // (shared_preferences, path_provider) are called by name from
+            // native code, and stripped methods hung the app at launch
+            // (NoSuchMethodError in SharedPreferencesApiRegistrar.getAll).
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
