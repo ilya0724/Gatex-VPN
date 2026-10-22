@@ -54,6 +54,24 @@ class DesktopCore implements VpnCore {
     return error;
   }
 
+  /// The helper's own "error: ..." line first; wintun logs harmless
+  /// lines such as "Failed to find matching adapter name" before it
+  /// creates the adapter, and those hid the real reason.
+  static String _reason(String stderr) {
+    final lines = stderr
+        .split('\n')
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+    final own = lines.where((l) => l.startsWith('error:')).toList();
+    if (own.isEmpty) return lines.join('\n');
+    final rest = lines.where((l) => !l.startsWith('error:'));
+    return [
+      own.last.replaceFirst(RegExp(r'^error:\s*'), ''),
+      ...rest,
+    ].join('\n');
+  }
+
   /// Starts the helper and waits until it reports "started". Returns null
   /// on success, or the helper's error text.
   Future<String?> _launch(String exe, List<String> args) async {
@@ -74,7 +92,7 @@ class DesktopCore implements VpnCore {
     });
     p.stderr.transform(utf8.decoder).listen(errors.write);
     p.exitCode.then((code) {
-      final text = errors.toString().trim();
+      final text = _reason(errors.toString());
       if (!started.isCompleted) {
         started.complete(text.isEmpty ? 'gatex-core exited with $code' : text);
         return;
