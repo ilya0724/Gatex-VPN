@@ -44,6 +44,13 @@ class DesktopCore implements VpnCore {
   Future<String?> start(String configJson) async {
     if (_process != null) return null;
     _status.add(const VpnStatus(VpnState.connecting));
+    if (Platform.isWindows) {
+      final conflict = await _windowsPreflight();
+      if (conflict != null) {
+        _status.add(const VpnStatus(VpnState.disconnected));
+        return conflict;
+      }
+    }
     final config = await _writeTemp('config.json', configJson);
     final args = ['run', '-c', config.path, '-watch-stdin'];
 
@@ -52,6 +59,47 @@ class DesktopCore implements VpnCore {
       error = await _launch('pkexec', [_corePath, ...args]);
     }
     return error;
+  }
+
+  /// Before the TUN goes up on Windows: a tunnel core left from an earlier
+  /// run is stopped, and another VPN's tunnel that holds the default route
+  /// is reported instead of fighting it. Two TUNs each routing 0.0.0.0/0
+  /// left Windows without internet, Happ included, until a reboot.
+  Future<String?> _windowsPreflight() async {
+    const script = r'''
+Get-CimInstance Win32_Process -Filter "Name='gatex-core.exe'" -ErrorAction SilentlyContinue |
+  Where-Object { $_.CommandLine -match '\srun\s' } |
+  ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | ForEach-Object {
+  $a = Get-NetAdapter -InterfaceIndex $_.ifIndex -ErrorAction SilentlyContinue
+  if ($a) { 'route|' + $a.Name + '|' + $a.InterfaceDescription }
+}
+''';
+    try {
+      final r = await Process.run('powershell', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        script,
+      ], stdoutEncoding: utf8).timeout(const Duration(seconds: 10));
+      for (final line in LineSplitter.split('${r.stdout}')) {
+        final parts = line.trim().split('|');
+        if (parts.length < 3 || parts[0] != 'route') continue;
+        final name = parts[1], desc = parts[2];
+        if (name == 'GateX') continue;
+        if (RegExp(
+          r'wintun|wireguard|tap-|tunnel|\btun\b|vpn',
+          caseSensitive: false,
+        ).hasMatch('$name $desc')) {
+          return 'Сейчас включён другой VPN (адаптер «$name»). '
+              'Отключите его в Happ или другом VPN-приложении и нажмите '
+              'ещё раз: два VPN сразу оставляют Windows без интернета.';
+        }
+      }
+    } on Object {
+      // The check is a courtesy; without PowerShell the core still starts.
+    }
+    return null;
   }
 
   /// The helper's own "error: ..." line first; wintun logs harmless
