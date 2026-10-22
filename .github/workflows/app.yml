@@ -179,13 +179,27 @@ jobs:
           name: GateX-linux
           path: dist/*
 
+  # On a v* tag, or on a branch push whose commit message has [release]:
+  # then the tag v<pubspec version> is created by the release itself.
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || contains(github.event.head_commit.message, '[release]')
     needs: [android, windows, linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: app/pubspec.yaml
+          sparse-checkout-cone-mode: false
+      - name: Version
+        id: ver
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=v$(sed -n 's/^version: \([0-9.]*\).*/\1/p' app/pubspec.yaml)" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -203,4 +217,8 @@ jobs:
         run: cd dist && sha256sum * > SHA256SUMS.txt
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: GateX ${{ steps.ver.outputs.tag }}
+          make_latest: true
           files: dist/*
