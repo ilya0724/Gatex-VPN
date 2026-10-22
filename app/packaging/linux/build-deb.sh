@@ -19,7 +19,7 @@ Version: $version
 Section: net
 Priority: optional
 Architecture: amd64
-Depends: libgtk-3-0, libcap2-bin
+Depends: libgtk-3-0, libcap2-bin, libayatana-appindicator3-1
 Maintainer: GateX <support@gatexx.ru>
 Homepage: https://gatexx.ru
 Description: GateX VPN client

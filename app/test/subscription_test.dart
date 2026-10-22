@@ -136,6 +136,7 @@ void main() {
       buildConnectConfig(
         servers: [servers.first, parseServers(realityLink).single],
         host: TunHost.android,
+        options: const ConnectOptions(directRu: false),
       ),
     );
     final tags = [for (final o in cfg['outbounds']) o['tag']];
@@ -155,6 +156,17 @@ void main() {
     expect(cfg['routing']['domainStrategy'], 'IPIfNonMatch');
   });
 
+  test('alpn is fixed up per transport', () {
+    Map tls(String link, [String query = '']) =>
+        parseServers(link.replaceFirst('#', '$query#'))
+            .single
+            .outbound['streamSettings']['tlsSettings'];
+    expect(tls(wsLink, '&alpn=h2,http/1.1')['alpn'], ['http/1.1']);
+    expect(tls(wsLink, '&alpn=h2').containsKey('alpn'), isFalse);
+    expect(tls(grpcTrojan, '&alpn=http/1.1')['alpn'], ['h2', 'http/1.1']);
+    expect(tls(xhttpLink)['alpn'], ['h2', 'http/1.1']);
+  });
+
   test('generated configs pass the real Xray core', () async {
     final core = Platform.environment['GATEX_CORE'];
     if (core == null) {
@@ -172,9 +184,16 @@ void main() {
         'single-${h.name}': buildConnectConfig(
           servers: [servers.first],
           host: h,
+          options: const ConnectOptions(
+            ipv6: false,
+            directRu: false,
+            dns: ['9.9.9.9'],
+            logFile: 'core.log',
+          ),
         ),
       for (var i = 0; i < servers.length; i++)
         'probe-$i': buildProbeConfig(servers[i]),
+      'probe-log': buildProbeConfig(servers.first, logFile: 'probe.log'),
     };
     for (final e in cases.entries) {
       final f = File('${dir.path}/${e.key}.json')..writeAsStringSync(e.value);

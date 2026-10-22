@@ -120,6 +120,11 @@ func MeasureDelay(configJSON string, probeURL string, timeoutMs int) (int, error
 	begin := time.Now()
 	resp, err := client.Get(probeURL)
 	if err != nil {
+		// The HTTP side often fails at once ("closed pipe") while Xray is
+		// still dialing; give the outbound time to log the real reason.
+		if wait := timeout - time.Since(begin); wait > 0 {
+			time.Sleep(min(wait, 2500*time.Millisecond))
+		}
 		return -1, err
 	}
 	io.Copy(io.Discard, resp.Body)

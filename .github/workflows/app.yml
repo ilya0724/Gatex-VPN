@@ -167,7 +167,7 @@ jobs:
       - name: Build
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libayatana-appindicator3-dev
           (cd app && ../.github/scripts/logged.sh linux-build flutter build linux --release)
           bundle=app/build/linux/x64/release/bundle
           (cd core && go build -trimpath -ldflags "-s -w" -o "../$bundle/gatex-core" ./cmd/gatex-core)

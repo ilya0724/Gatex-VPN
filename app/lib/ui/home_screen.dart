@@ -6,78 +6,84 @@ import '../core/vpn_core.dart';
 import '../links.dart';
 import '../state/app_state.dart';
 import '../subscription/subscription.dart';
+import 'flags.dart';
+import 'intro.dart';
+import 'motion.dart';
 import 'servers_screen.dart';
-import 'settings_sheet.dart';
+import 'settings_screen.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.state});
   final AppState state;
 
   @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  /// Sections arrive one after another as the intro clears.
+  final Duration _base = IntroOverlay.wait;
+
+  Widget _in(int i, Widget child) =>
+      FadeSlideIn.staggered(index: i, base: _base, child: child);
+
+  @override
   Widget build(BuildContext context) {
-    final sub = state.subscription!;
-    return Scaffold(
-      body: Backdrop(
-        child: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 480),
-              child: RefreshIndicator(
-                color: GX.accent,
-                onRefresh: state.refresh,
-                child: LayoutBuilder(
-                  builder: (context, box) => SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(minHeight: box.maxHeight),
-                      child: Column(
-                        children: [
-                          _TopBar(state: state),
-                          if (state.update != null) ...[
-                            _UpdateBanner(state: state),
-                            const SizedBox(height: 12),
-                          ],
-                          _PlanCard(sub: sub),
-                          if (sub.announce != null) ...[
-                            const SizedBox(height: 12),
-                            GlassCard(
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.campaign_outlined,
-                                    color: GX.accent,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(sub.announce!, style: body(14)),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: 24),
-                          ConnectButton(
-                            state: state.vpnState,
-                            onTap: state.toggle,
-                          ),
-                          const SizedBox(height: 8),
-                          _StatusLine(state: state),
-                          const SizedBox(height: 24),
-                          if (state.error != null) ...[
-                            _ErrorCard(state: state),
-                            const SizedBox(height: 12),
-                          ],
-                          _ServerTile(state: state),
-                          const SizedBox(height: 12),
-                          const _LinksRow(),
-                          const SizedBox(height: 16),
-                        ],
-                      ),
+    return ListenableBuilder(
+      listenable: widget.state,
+      builder: (context, _) => Scaffold(
+        body: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, box) =>
+                box.maxWidth >= 860 ? _wide(context) : _narrow(context),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _narrow(BuildContext context) {
+    final state = widget.state;
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: RefreshIndicator(
+          color: GX.accent,
+          onRefresh: state.refresh,
+          child: LayoutBuilder(
+            builder: (context, box) => SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: box.maxHeight),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      children: [
+                        _in(0, _TopBar(state: state)),
+                        ..._notices(1),
+                      ],
                     ),
-                  ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: _in(2, _ConnectBlock(state: state)),
+                    ),
+                    Column(
+                      children: [
+                        if (state.error != null) ...[
+                          _ErrorCard(state: state),
+                          const SizedBox(height: 12),
+                        ],
+                        _in(3, _ServerTile(state: state)),
+                        const SizedBox(height: 12),
+                        _in(4, const _LinksRow()),
+                        const SizedBox(height: 16),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -85,6 +91,82 @@ class HomeScreen extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Wide windows: the button on the left, the server list on the right.
+  Widget _wide(BuildContext context) {
+    final state = widget.state;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 8, 0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  _in(0, _TopBar(state: state)),
+                  ..._notices(1),
+                  const SizedBox(height: 24),
+                  _in(2, _ConnectBlock(state: state)),
+                  const SizedBox(height: 16),
+                  if (state.error != null) ...[
+                    _ErrorCard(state: state),
+                    const SizedBox(height: 12),
+                  ],
+                  _in(3, const _LinksRow()),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 420,
+            child: _in(
+              2,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 18, 16, 4),
+                    child: Text('Серверы', style: display(18)),
+                  ),
+                  Expanded(child: ServerList(state: state)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _notices(int index) {
+    final state = widget.state;
+    final sub = state.subscription!;
+    return [
+      if (state.update != null) ...[
+        _in(index, _UpdateBanner(state: state)),
+        const SizedBox(height: 12),
+      ],
+      _in(index, _PlanCard(sub: sub)),
+      if (sub.announce != null) ...[
+        const SizedBox(height: 12),
+        _in(
+          index,
+          GlassCard(
+            child: Row(
+              children: [
+                const Icon(Icons.campaign_outlined, color: GX.accent),
+                const SizedBox(width: 12),
+                Expanded(child: Text(sub.announce!, style: body(14))),
+              ],
+            ),
+          ),
+        ),
+      ],
+    ];
   }
 }
 
@@ -95,29 +177,39 @@ class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
-          Image.asset('assets/images/mark.png', height: 26),
+          Image.asset('assets/images/mark.png', height: 24),
           const SizedBox(width: 10),
-          Text('GateX', style: display(18)),
+          Text('GateX', style: display(19)),
           const Spacer(),
-          if (state.refreshing)
-            const Padding(
+          AnimatedOpacity(
+            opacity: state.refreshing ? 1 : 0,
+            duration: const Duration(milliseconds: 250),
+            child: const Padding(
               padding: EdgeInsets.all(12),
               child: SizedBox(
-                width: 18,
-                height: 18,
+                width: 16,
+                height: 16,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
                   color: GX.accent,
                 ),
               ),
             ),
+          ),
+          IconButton(
+            tooltip: 'Обновить подписку',
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: state.refreshing ? null : state.refresh,
+          ),
           IconButton(
             tooltip: 'Настройки',
             icon: const Icon(Icons.tune_rounded),
-            onPressed: () => showSettingsSheet(context, state),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => SettingsScreen(state: state)),
+            ),
           ),
         ],
       ),
@@ -134,46 +226,83 @@ class _PlanCard extends StatelessWidget {
     final days = sub.daysLeft;
     final soon = days != null && days <= 3;
     final expire = sub.expire;
+    final alert = soon || sub.isExpired;
     final until = expire == null
         ? 'Без ограничения по сроку'
         : sub.isExpired
         ? 'Подписка закончилась'
-        : 'До ${_date(expire)} · осталось ${_days(days!)}';
+        : 'Осталось ${_days(days!)} · до ${_date(expire)}';
+    final used = sub.upload + sub.download;
     return GlassCard(
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      child: Column(
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  sub.title ?? 'Подписка GateX',
-                  style: body(16, weight: 700),
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: (alert ? GX.warn : GX.accent).withValues(alpha: 0.14),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  until,
-                  style: body(
-                    13,
-                    color: soon || sub.isExpired ? GX.warn : GX.muted,
-                  ),
+                child: Icon(
+                  alert
+                      ? Icons.hourglass_bottom_rounded
+                      : Icons.verified_rounded,
+                  color: alert ? GX.warn : GX.accent,
+                  size: 22,
                 ),
-                if (sub.total > 0) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    'Трафик: ${_gb(sub.upload + sub.download)} из ${_gb(sub.total)}',
-                    style: body(13, color: GX.muted),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      sub.title ?? 'Подписка GateX',
+                      style: body(15, weight: 700),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      until,
+                      style: body(12.5, color: alert ? GX.warn : GX.muted),
+                    ),
+                  ],
+                ),
+              ),
+              if (alert)
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size(0, 38),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                   ),
-                ],
-              ],
-            ),
+                  onPressed: () => openLink(Links.cabinet),
+                  child: const Text('Продлить'),
+                ),
+            ],
           ),
-          if (soon || sub.isExpired)
-            FilledButton(
-              style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
-              onPressed: () => openLink(Links.cabinet),
-              child: const Text('Продлить'),
+          if (sub.total > 0) ...[
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: (used / sub.total).clamp(0, 1).toDouble(),
+                minHeight: 5,
+                color: GX.accent,
+                backgroundColor: GX.glassStrong,
+              ),
             ),
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Трафик: ${_gb(used)} из ${_gb(sub.total)}',
+                style: body(12, color: GX.muted),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -196,27 +325,28 @@ class _PlanCard extends StatelessWidget {
       '${(bytes / (1 << 30)).toStringAsFixed(1)} ГБ';
 }
 
-class _StatusLine extends StatefulWidget {
-  const _StatusLine({required this.state});
+/// The button with the status and the session timer under it.
+class _ConnectBlock extends StatefulWidget {
+  const _ConnectBlock({required this.state});
   final AppState state;
 
   @override
-  State<_StatusLine> createState() => _StatusLineState();
+  State<_ConnectBlock> createState() => _ConnectBlockState();
 }
 
-class _StatusLineState extends State<_StatusLine> {
+class _ConnectBlockState extends State<_ConnectBlock> {
   DateTime? _since;
   Timer? _tick;
 
   @override
-  void didUpdateWidget(_StatusLine old) {
-    super.didUpdateWidget(old);
+  void initState() {
+    super.initState();
     _sync();
   }
 
   @override
-  void initState() {
-    super.initState();
+  void didUpdateWidget(_ConnectBlock old) {
+    super.didUpdateWidget(old);
     _sync();
   }
 
@@ -242,29 +372,51 @@ class _StatusLineState extends State<_StatusLine> {
 
   @override
   Widget build(BuildContext context) {
-    final (text, color) = switch (widget.state.vpnState) {
+    final state = widget.state;
+    final (text, color) = switch (state.vpnState) {
       VpnState.connected => ('Подключено', GX.accent),
       VpnState.connecting => ('Подключаемся…', GX.text),
       VpnState.disconnecting => ('Отключаемся…', GX.text),
       VpnState.disconnected => ('Не подключено', GX.muted),
     };
     final since = _since;
-    String? elapsed;
+    String hint;
     if (since != null) {
       final d = DateTime.now().difference(since);
       String two(int n) => n.toString().padLeft(2, '0');
-      elapsed =
+      hint =
           '${two(d.inHours)}:${two(d.inMinutes % 60)}:${two(d.inSeconds % 60)}';
+    } else {
+      hint = state.busy ? 'Секунду…' : 'Нажмите, чтобы подключиться';
     }
     return Column(
       children: [
-        Text(text, style: display(18, color: color)),
-        const SizedBox(height: 4),
+        ConnectButton(state: state.vpnState, onTap: state.toggle),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          transitionBuilder: (child, a) => FadeTransition(
+            opacity: a,
+            child: SlideTransition(
+              position: Tween(
+                begin: const Offset(0, 0.3),
+                end: Offset.zero,
+              ).animate(a),
+              child: child,
+            ),
+          ),
+          child: Text(
+            text,
+            key: ValueKey(text),
+            style: display(20, color: color),
+          ),
+        ),
+        const SizedBox(height: 6),
         Text(
-          elapsed ?? 'Нажмите, чтобы подключиться',
+          hint,
           style: body(
-            13,
+            13.5,
             color: GX.muted,
+            weight: since != null ? 700 : 500,
           ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
         ),
       ],
@@ -284,34 +436,33 @@ class _ServerTile extends StatelessWidget {
           .push(MaterialPageRoute(builder: (_) => ServersScreen(state: state))),
       child: Row(
         children: [
-          s == null
-              ? Container(
-                  width: 40,
-                  height: 40,
-                  decoration: const BoxDecoration(
-                    color: Color(0x242EE6A6),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.bolt_rounded, color: GX.accent),
-                )
-              : FlagBadge(flag: s.flag),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            child: s == null
+                ? const AutoBadge(key: ValueKey('auto'))
+                : FlagBadge(key: ValueKey(s.id), code: s.countryCode),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(s?.title ?? 'Авто', style: body(16, weight: 700)),
+                Text(
+                  s?.title ?? 'Авто',
+                  style: body(16, weight: 700),
+                  overflow: TextOverflow.ellipsis,
+                ),
                 Text(
                   s == null
                       ? 'Самый быстрый из ${_servers(state.servers.length)}'
-                      : 'Выбран вручную',
-                  style: body(13, color: GX.muted),
+                      : s.transport,
+                  style: body(12.5, color: GX.muted),
                 ),
               ],
             ),
           ),
           if (s != null)
-            DelayChip(
+            PingIndicator(
               tested: state.delays.containsKey(s.id),
               ms: state.delays[s.id],
             ),
@@ -329,21 +480,26 @@ class _ErrorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
-      decoration: BoxDecoration(
-        color: GX.danger.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(GX.radius),
-        border: Border.all(color: GX.danger.withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        children: [
-          Expanded(child: Text(state.error!, style: body(14))),
-          IconButton(
-            icon: const Icon(Icons.close_rounded, size: 18),
-            onPressed: state.clearError,
-          ),
-        ],
+    return FadeSlideIn(
+      key: ValueKey(state.error),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 8, 4, 8),
+        decoration: BoxDecoration(
+          color: GX.danger.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(GX.radius),
+          border: Border.all(color: GX.danger.withValues(alpha: 0.4)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.error_outline_rounded, color: GX.danger, size: 20),
+            const SizedBox(width: 10),
+            Expanded(child: Text(state.error!, style: body(14))),
+            IconButton(
+              icon: const Icon(Icons.close_rounded, size: 18),
+              onPressed: state.clearError,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -386,9 +542,9 @@ class _LinksRow extends StatelessWidget {
         onTap: () => openLink(url),
         child: Column(
           children: [
-            Icon(icon, color: GX.accent),
+            Icon(icon, color: GX.accent, size: 22),
             const SizedBox(height: 6),
-            Text(label, style: body(13, weight: 600)),
+            Text(label, style: body(12.5, weight: 600)),
           ],
         ),
       ),
@@ -396,9 +552,9 @@ class _LinksRow extends StatelessWidget {
     return Row(
       children: [
         item(Icons.person_outline_rounded, 'Кабинет', Links.cabinet),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
         item(Icons.support_agent_rounded, 'Поддержка', Links.support),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
         item(Icons.language_rounded, 'Сайт', Links.site),
       ],
     );

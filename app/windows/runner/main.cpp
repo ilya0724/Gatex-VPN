@@ -2,6 +2,8 @@
 #include <flutter/flutter_view_controller.h>
 #include <windows.h>
 
+#include <string>
+
 #include "flutter_window.h"
 #include "utils.h"
 
@@ -11,6 +13,26 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // new console when running with a debugger.
   if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent()) {
     CreateAndAttachConsole();
+  }
+
+  // One copy at a time: a second launch (a gatex:// link, the Start menu)
+  // hands its command line to the running window and exits.
+  HANDLE single = ::CreateMutexW(nullptr, TRUE, L"Local\\GateX.VPN.SingleInstance");
+  if (single && ::GetLastError() == ERROR_ALREADY_EXISTS) {
+    HWND running = ::FindWindowW(L"FLUTTER_RUNNER_WIN32_WINDOW", kWindowTitle);
+    if (running) {
+      std::wstring line = command_line ? command_line : L"";
+      COPYDATASTRUCT data{kActivateMessage,
+                          static_cast<DWORD>((line.size() + 1) * sizeof(wchar_t)),
+                          const_cast<wchar_t*>(line.c_str())};
+      DWORD pid = 0;
+      ::GetWindowThreadProcessId(running, &pid);
+      ::AllowSetForegroundWindow(pid);
+      ::SendMessageTimeoutW(running, WM_COPYDATA, 0,
+                            reinterpret_cast<LPARAM>(&data), SMTO_ABORTIFHUNG,
+                            3000, nullptr);
+    }
+    return EXIT_SUCCESS;
   }
 
   // Initialize COM, so that it is available for use in the library and/or
@@ -26,8 +48,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
-  Win32Window::Size size(440, 860);
-  if (!window.Create(L"GateX VPN", origin, size)) {
+  Win32Window::Size size(460, 820);
+  if (!window.Create(kWindowTitle, origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);

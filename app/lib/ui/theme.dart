@@ -40,6 +40,14 @@ TextStyle display(double size, {double weight = 600, Color color = GX.text}) =>
       height: 1.15,
     );
 
+TextStyle mono(double size, {Color color = GX.text}) => TextStyle(
+  fontFamily: 'Consolas',
+  fontFamilyFallback: const ['Cascadia Mono', 'DejaVu Sans Mono', 'monospace'],
+  fontSize: size,
+  color: color,
+  height: 1.45,
+);
+
 FontWeight _nearest(double w) =>
     FontWeight.values[((w / 100).round() - 1).clamp(0, 8)];
 
@@ -53,8 +61,41 @@ ThemeData buildTheme() {
   );
   return ThemeData(
     colorScheme: scheme,
-    scaffoldBackgroundColor: GX.bg,
+    // The animated background sits behind every screen (see main.dart).
+    scaffoldBackgroundColor: Colors.transparent,
+    canvasColor: GX.bg2,
     fontFamily: 'Manrope',
+    pageTransitionsTheme: PageTransitionsTheme(
+      builders: {
+        for (final p in TargetPlatform.values) p: const _SlideFadeTransitions(),
+      },
+    ),
+    switchTheme: SwitchThemeData(
+      thumbColor: WidgetStateProperty.resolveWith(
+        (s) => s.contains(WidgetState.selected) ? GX.accentInk : GX.muted,
+      ),
+      trackColor: WidgetStateProperty.resolveWith(
+        (s) => s.contains(WidgetState.selected) ? GX.accent : GX.glassStrong,
+      ),
+      trackOutlineColor: WidgetStateProperty.resolveWith(
+        (s) => s.contains(WidgetState.selected) ? GX.accent : GX.line,
+      ),
+    ),
+    tooltipTheme: TooltipThemeData(
+      decoration: BoxDecoration(
+        color: GX.bg2,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: GX.line),
+      ),
+      textStyle: body(12),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: GX.bg2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(GX.radius),
+        side: const BorderSide(color: GX.line),
+      ),
+    ),
     textTheme: TextTheme(
       bodyMedium: body(15),
       bodyLarge: body(16),
@@ -111,35 +152,6 @@ ThemeData buildTheme() {
   );
 }
 
-/// The site's backdrop: dark green with a soft mint glow up top.
-class Backdrop extends StatelessWidget {
-  const Backdrop({super.key, required this.child});
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [GX.bg2, GX.bg],
-        ),
-      ),
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(-0.7, -1.1),
-            radius: 1.1,
-            colors: [Color(0x332EE6A6), Color(0x002EE6A6)],
-          ),
-        ),
-        child: child,
-      ),
-    );
-  }
-}
-
 /// A frosted card like the ones on the site.
 class GlassCard extends StatelessWidget {
   const GlassCard({
@@ -167,6 +179,44 @@ class GlassCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(padding: padding, child: child),
+      ),
+    );
+  }
+}
+
+/// Screens share one background, so a new page slides in a little and the
+/// old one fades out instead of the pages overlapping.
+class _SlideFadeTransitions extends PageTransitionsBuilder {
+  const _SlideFadeTransitions();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    final enter = CurvedAnimation(
+      parent: animation,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
+    final leave = CurvedAnimation(
+      parent: secondaryAnimation,
+      curve: const Interval(0, 0.6, curve: Curves.easeOut),
+    );
+    return FadeTransition(
+      opacity: ReverseAnimation(leave),
+      child: FadeTransition(
+        opacity: enter,
+        child: SlideTransition(
+          position: Tween(
+            begin: const Offset(0.06, 0),
+            end: Offset.zero,
+          ).animate(enter),
+          child: child,
+        ),
       ),
     );
   }

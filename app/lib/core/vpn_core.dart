@@ -15,6 +15,14 @@ class VpnStatus {
   final String? error;
 }
 
+/// A delay test result: the round trip in ms, or why it failed.
+class DelayResult {
+  const DelayResult.ok(int this.ms) : error = null;
+  const DelayResult.failed(String this.error) : ms = null;
+  final int? ms;
+  final String? error;
+}
+
 /// The platform side that runs Xray: a library inside an Android
 /// VpnService, or the gatex-core helper process on desktop.
 abstract class VpnCore {
@@ -34,9 +42,8 @@ abstract class VpnCore {
 
   Future<void> stop();
 
-  /// Round trip through [configJson]'s proxy to [probeUrl], in ms, or null
-  /// when the server does not answer.
-  Future<int?> measureDelay(String configJson);
+  /// Round trip through [configJson]'s proxy to [probeUrl].
+  Future<DelayResult> measureDelay(String configJson, {int timeoutMs});
 
   Future<String> coreVersion();
 }

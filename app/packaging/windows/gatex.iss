@@ -51,5 +51,6 @@ Root: HKCR; Subkey: "gatex\shell\open\command"; ValueType: string; ValueName: ""
 Filename: "{app}\gatex.exe"; Description: "{cm:LaunchProgram,GateX VPN}"; Flags: nowait postinstall skipifsilent shellexec
 
 [UninstallRun]
+Filename: "schtasks"; Parameters: "/Delete /TN ""GateX VPN"" /F"; Flags: runhidden; RunOnceId: "DropAutostart"
 Filename: "taskkill"; Parameters: "/F /IM gatex-core.exe"; Flags: runhidden; RunOnceId: "KillCore"
 Filename: "taskkill"; Parameters: "/F /IM gatex.exe"; Flags: runhidden; RunOnceId: "KillApp"

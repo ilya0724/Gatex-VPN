@@ -48,13 +48,19 @@ class AndroidCore implements VpnCore {
   Future<void> stop() => _methods.invokeMethod('stop');
 
   @override
-  Future<int?> measureDelay(String configJson) async {
-    final ms = await _methods.invokeMethod<int>('delay', {
+  Future<DelayResult> measureDelay(
+    String configJson, {
+    int timeoutMs = 6000,
+  }) async {
+    final r = await _methods.invokeMapMethod<String, Object?>('delay', {
       'config': configJson,
       'url': probeUrl,
-      'timeout': 5000,
+      'timeout': timeoutMs,
     });
-    return ms == null || ms < 0 ? null : ms;
+    final ms = r?['ms'] as int? ?? -1;
+    return ms >= 0
+        ? DelayResult.ok(ms)
+        : DelayResult.failed(r?['error'] as String? ?? 'no answer');
   }
 
   @override

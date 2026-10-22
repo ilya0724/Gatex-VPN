@@ -251,7 +251,7 @@ Map<String, dynamic> _streamSettings(
 
   final sni = v('sni') ?? v('peer');
   final fp = v('fp');
-  final alpn = v('alpn')?.split(',');
+  final alpn = _alpnFor(network, v('alpn'));
   if (security == 'tls') {
     stream['tlsSettings'] = {
       'serverName': sni ?? host,
@@ -271,6 +271,26 @@ Map<String, dynamic> _streamSettings(
     };
   }
   return stream;
+}
+
+/// Panels often list "h2,http/1.1" for every host. A WebSocket server
+/// that picks h2 then breaks the upgrade, and gRPC cannot run without h2,
+/// so the list is fixed up per transport.
+List<String>? _alpnFor(String network, String? raw) {
+  final list = raw
+      ?.split(',')
+      .map((a) => a.trim())
+      .where((a) => a.isNotEmpty)
+      .toList();
+  if (list == null || list.isEmpty) return null;
+  switch (network) {
+    case 'ws' || 'httpupgrade':
+      list.remove('h2');
+      return list.isEmpty ? null : list;
+    case 'grpc':
+      return list.contains('h2') ? list : ['h2', ...list];
+  }
+  return list;
 }
 
 String _transportLabel(Map<String, dynamic> stream) {

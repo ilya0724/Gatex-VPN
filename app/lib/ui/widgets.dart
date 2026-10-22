@@ -1,185 +1,346 @@
-import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/vpn_core.dart';
+import 'motion.dart';
 import 'theme.dart';
 
 Future<void> openLink(String url) =>
     launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
 
-/// Country flag. Windows has no flag emoji, so desktop shows the code.
-class FlagBadge extends StatelessWidget {
-  const FlagBadge({super.key, required this.flag, this.size = 40});
-  final String flag;
+Color delayColor(int ms) => ms < 300
+    ? GX.accent
+    : ms < 800
+    ? GX.warn
+    : const Color(0xFFFF8A5B);
+
+/// Signal-style bars plus the delay in ms, or a red "no answer".
+class PingIndicator extends StatelessWidget {
+  const PingIndicator({
+    super.key,
+    required this.tested,
+    this.ms,
+    this.testing = false,
+  });
+  final bool tested;
+  final int? ms;
+  final bool testing;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!tested) {
+      return testing
+          ? const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2, color: GX.muted),
+            )
+          : const SizedBox.shrink();
+    }
+    final value = ms;
+    final color = value == null ? GX.danger : delayColor(value);
+    final level = value == null
+        ? 0
+        : value < 300
+        ? 4
+        : value < 600
+        ? 3
+        : value < 1200
+        ? 2
+        : 1;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value == null ? 'нет ответа' : '$value мс',
+          style: body(
+            12.5,
+            weight: 700,
+            color: color,
+          ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+        ),
+        const SizedBox(width: 8),
+        for (var i = 0; i < 4; i++)
+          AnimatedContainer(
+            duration: Duration(milliseconds: 250 + i * 60),
+            margin: const EdgeInsets.only(left: 2),
+            width: 3.5,
+            height: 5.0 + i * 3,
+            decoration: BoxDecoration(
+              color: i < level ? color : GX.line,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class TagChip extends StatelessWidget {
+  const TagChip(this.text, {super.key, this.color = GX.muted});
+  final String text;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Text(text, style: body(10.5, weight: 800, color: color)),
+    );
+  }
+}
+
+/// The "Авто" icon: a bolt in a mint circle.
+class AutoBadge extends StatelessWidget {
+  const AutoBadge({super.key, this.size = 40});
   final double size;
 
   @override
   Widget build(BuildContext context) {
-    final code = String.fromCharCodes(
-      flag.runes.map((r) => r - 0x1F1E6 + 0x41),
-    );
-    final emoji = Platform.isAndroid && flag.isNotEmpty;
     return Container(
       width: size,
       height: size,
-      alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: GX.glassStrong,
-        borderRadius: BorderRadius.circular(size / 2),
-        border: Border.all(color: GX.line),
+        shape: BoxShape.circle,
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0x552EE6A6), Color(0x1418B98A)],
+        ),
+        border: Border.all(color: GX.accent.withValues(alpha: 0.4)),
       ),
-      child: emoji
-          ? Text(flag, style: TextStyle(fontSize: size * 0.5))
-          : flag.isEmpty
-          ? Icon(Icons.public, size: size * 0.5, color: GX.muted)
-          : Text(code, style: body(size * 0.32, weight: 800, color: GX.accent)),
+      child: Icon(Icons.bolt_rounded, color: GX.accent, size: size * 0.55),
     );
   }
 }
 
-class DelayChip extends StatelessWidget {
-  const DelayChip({super.key, required this.tested, this.ms});
-  final bool tested;
-  final int? ms;
-
-  @override
-  Widget build(BuildContext context) {
-    if (!tested) return const SizedBox.shrink();
-    final color = ms == null
-        ? GX.danger
-        : ms! < 300
-        ? GX.accent
-        : ms! < 800
-        ? GX.warn
-        : GX.danger;
-    return Text(
-      ms == null ? 'нет ответа' : '$ms мс',
-      style: body(13, weight: 700, color: color),
-    );
-  }
-}
-
-/// The big round button in the middle of the home screen.
+/// The big round button in the middle of the home screen. Rings ripple
+/// out while connected; an arc runs around it while connecting.
 class ConnectButton extends StatefulWidget {
-  const ConnectButton({super.key, required this.state, required this.onTap});
+  const ConnectButton({
+    super.key,
+    required this.state,
+    required this.onTap,
+    this.size = 188,
+  });
   final VpnState state;
   final VoidCallback onTap;
+  final double size;
 
   @override
   State<ConnectButton> createState() => _ConnectButtonState();
 }
 
 class _ConnectButtonState extends State<ConnectButton>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final _spin = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1400),
+    duration: const Duration(milliseconds: 1100),
+  );
+  late final _ripple = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2800),
+  );
+  late final _on = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 600),
   );
 
   bool get _busy =>
       widget.state == VpnState.connecting ||
       widget.state == VpnState.disconnecting;
+  bool get _connected => widget.state == VpnState.connected;
 
   @override
   void initState() {
     super.initState();
-    if (_busy) _spin.repeat();
+    _sync();
   }
 
   @override
   void didUpdateWidget(ConnectButton old) {
     super.didUpdateWidget(old);
-    if (_busy && !_spin.isAnimating) _spin.repeat();
-    if (!_busy && _spin.isAnimating) _spin.stop();
+    _sync();
+  }
+
+  void _sync() {
+    if (_busy) {
+      if (!_spin.isAnimating) _spin.repeat();
+    } else {
+      _spin.stop();
+    }
+    if (_connected) {
+      if (!_ripple.isAnimating) _ripple.repeat();
+      _on.forward();
+    } else {
+      _ripple.stop();
+      _ripple.value = 0;
+      _on.reverse();
+    }
   }
 
   @override
   void dispose() {
     _spin.dispose();
+    _ripple.dispose();
+    _on.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final on = widget.state == VpnState.connected;
-    const size = 196.0;
+    final size = widget.size;
+    final on = CurvedAnimation(parent: _on, curve: Curves.easeInOutCubic);
     return Semantics(
       button: true,
-      label: on ? 'Отключить VPN' : 'Подключить VPN',
-      child: GestureDetector(
+      label: _connected ? 'Отключить VPN' : 'Подключить VPN',
+      child: PressScale(
         onTap: widget.onTap,
         child: SizedBox(
-          width: size + 48,
-          height: size + 48,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 400),
-                width: size + 40,
-                height: size + 40,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: GX.accent.withValues(alpha: on ? 0.35 : 0.08),
-                      blurRadius: on ? 60 : 30,
-                      spreadRadius: on ? 6 : 0,
-                    ),
-                  ],
+          width: size + 120,
+          height: size + 120,
+          child: AnimatedBuilder(
+            animation: Listenable.merge([_spin, _ripple, on]),
+            builder: (context, _) {
+              final t = on.value;
+              return CustomPaint(
+                painter: _RingsPainter(
+                  core: size / 2,
+                  ripple: _ripple.value,
+                  ripplesOn: _connected,
+                  spin: _busy ? _spin.value : null,
+                  on: t,
                 ),
-              ),
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 400),
-                width: size,
-                height: size,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: on
-                      ? const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [Color(0xFF6DFACB), GX.accent2],
-                        )
-                      : null,
-                  color: on ? null : GX.glass,
-                  border: Border.all(
-                    color: on
-                        ? Colors.transparent
-                        : GX.accent.withValues(alpha: 0.5),
-                    width: 2,
-                  ),
-                ),
-                child: Icon(
-                  Icons.power_settings_new_rounded,
-                  size: 72,
-                  color: on ? GX.accentInk : GX.accent,
-                ),
-              ),
-              if (_busy)
-                AnimatedBuilder(
-                  animation: _spin,
-                  builder: (_, _) => Transform.rotate(
-                    angle: _spin.value * 2 * pi,
-                    child: SizedBox(
-                      width: size + 20,
-                      height: size + 20,
-                      child: const CircularProgressIndicator(
-                        value: 0.28,
-                        strokeWidth: 3,
-                        strokeCap: StrokeCap.round,
-                        color: GX.accent,
+                child: Center(
+                  child: Container(
+                    width: size,
+                    height: size,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          Color.lerp(
+                            const Color(0xFF13302A),
+                            const Color(0xFF7CFBD2),
+                            t,
+                          )!,
+                          Color.lerp(const Color(0xFF0B1E19), GX.accent2, t)!,
+                        ],
                       ),
+                      border: Border.all(
+                        color: Color.lerp(
+                          GX.accent.withValues(alpha: 0.45),
+                          const Color(0x66FFFFFF),
+                          t,
+                        )!,
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: GX.accent.withValues(alpha: 0.12 + 0.33 * t),
+                          blurRadius: 30 + 40 * t,
+                          spreadRadius: 2 + 6 * t,
+                        ),
+                        const BoxShadow(
+                          color: Color(0x66000000),
+                          blurRadius: 24,
+                          offset: Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      Icons.power_settings_new_rounded,
+                      size: size * 0.36,
+                      color: Color.lerp(GX.accent, GX.accentInk, t),
                     ),
                   ),
                 ),
-            ],
+              );
+            },
           ),
         ),
       ),
     );
   }
+}
+
+class _RingsPainter extends CustomPainter {
+  _RingsPainter({
+    required this.core,
+    required this.ripple,
+    required this.ripplesOn,
+    required this.spin,
+    required this.on,
+  });
+  final double core;
+  final double ripple;
+  final bool ripplesOn;
+  final double? spin;
+  final double on;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final track = core + 16;
+
+    if (ripplesOn) {
+      for (var i = 0; i < 3; i++) {
+        final p = (ripple + i / 3) % 1;
+        final r = core + 6 + p * 54;
+        canvas.drawCircle(
+          c,
+          r,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.6
+            ..color = GX.accent.withValues(alpha: 0.45 * (1 - p) * on),
+        );
+      }
+    }
+
+    canvas.drawCircle(
+      c,
+      track,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = Color.lerp(GX.line, GX.accent.withValues(alpha: 0.5), on)!,
+    );
+
+    final s = spin;
+    if (s != null) {
+      final rect = Rect.fromCircle(center: c, radius: track);
+      canvas.save();
+      canvas.translate(c.dx, c.dy);
+      canvas.rotate(s * 2 * pi);
+      canvas.translate(-c.dx, -c.dy);
+      canvas.drawArc(
+        rect,
+        0,
+        pi * 0.9,
+        false,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.5
+          ..strokeCap = StrokeCap.round
+          ..shader = SweepGradient(
+            endAngle: pi * 0.9,
+            colors: [GX.accent.withValues(alpha: 0), GX.accent],
+          ).createShader(rect),
+      );
+      canvas.restore();
+    }
+  }
+
+  @override
+  bool shouldRepaint(_RingsPainter old) => true;
 }

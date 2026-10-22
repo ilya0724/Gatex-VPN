@@ -52,12 +52,12 @@ class MainActivity : FlutterActivity() {
                     val url = call.argument<String>("url")!!
                     val timeout = call.argument<Int>("timeout") ?: 5000
                     thread {
-                        val ms = try {
-                            Gatexcore.measureDelay(config, url, timeout.toLong()).toInt()
-                        } catch (_: Exception) {
-                            -1
+                        val answer: Map<String, Any?> = try {
+                            mapOf("ms" to Gatexcore.measureDelay(config, url, timeout.toLong()).toInt())
+                        } catch (e: Exception) {
+                            mapOf("ms" to -1, "error" to (e.message ?: e.toString()))
                         }
-                        runOnUiThread { result.success(ms) }
+                        runOnUiThread { result.success(answer) }
                     }
                 }
                 "version" -> result.success(Gatexcore.version())

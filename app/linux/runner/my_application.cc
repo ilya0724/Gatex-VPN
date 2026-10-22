@@ -14,9 +14,10 @@ struct _MyApplication {
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
-// Called when first Flutter frame received.
+// Called when first Flutter frame received. Dart shows the window through
+// window_manager, or keeps it in the tray when started with --hidden.
 static void first_frame_cb(MyApplication* self, FlView* view) {
-  gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
+  gtk_widget_realize(gtk_widget_get_toplevel(GTK_WIDGET(view)));
 }
 
 // Implements GApplication::activate.
@@ -52,7 +53,7 @@ static void my_application_activate(GApplication* application) {
     gtk_window_set_title(window, "GateX VPN");
   }
 
-  gtk_window_set_default_size(window, 440, 860);
+  gtk_window_set_default_size(window, 460, 820);
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(

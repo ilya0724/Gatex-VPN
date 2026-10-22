@@ -122,7 +122,10 @@ class DesktopCore implements VpnCore {
   }
 
   @override
-  Future<int?> measureDelay(String configJson) async {
+  Future<DelayResult> measureDelay(
+    String configJson, {
+    int timeoutMs = 6000,
+  }) async {
     final file = await _writeTemp(
       'probe-${DateTime.now().microsecondsSinceEpoch}.json',
       configJson,
@@ -135,11 +138,14 @@ class DesktopCore implements VpnCore {
         '-url',
         probeUrl,
         '-timeout',
-        '5000',
+        '$timeoutMs',
       ]);
-      return r.exitCode == 0 ? int.tryParse('${r.stdout}'.trim()) : null;
-    } on ProcessException {
-      return null;
+      final ms = int.tryParse('${r.stdout}'.trim());
+      if (r.exitCode == 0 && ms != null) return DelayResult.ok(ms);
+      final err = '${r.stderr}'.trim().replaceFirst(RegExp(r'^error:\s*'), '');
+      return DelayResult.failed(err.isEmpty ? 'exit ${r.exitCode}' : err);
+    } on ProcessException catch (e) {
+      return DelayResult.failed(e.message);
     } finally {
       file.deleteSync();
     }

@@ -22,14 +22,53 @@ const _privateCidrs = [
   'fe80::/10',
 ];
 
+/// What the user picked in settings that changes the config.
+class ConnectOptions {
+  const ConnectOptions({
+    this.ipv6 = true,
+    this.directRu = true,
+    this.dns = const ['1.1.1.1', '8.8.8.8'],
+    this.logFile,
+    this.logLevel = 'warning',
+  });
+
+  final bool ipv6;
+
+  /// Russian sites go around the tunnel: banks and Госуслуги often refuse
+  /// foreign IPs, and they are not blocked anyway.
+  final bool directRu;
+  final List<String> dns;
+
+  /// Where Xray writes its error log, shown in the app's journal.
+  final String? logFile;
+  final String logLevel;
+}
+
+/// Domains of Russian services, matched with their subdomains. Most sit
+/// under .ru/.рф/.su; the rest are the big ones on other zones.
+const russianDomains = [
+  'domain:ru',
+  'domain:xn--p1ai',
+  'domain:su',
+  'domain:yandex.net',
+  'domain:yandex.com',
+  'domain:yastatic.net',
+  'domain:vk.com',
+  'domain:vk.me',
+  'domain:userapi.com',
+  'domain:vkuser.net',
+  'domain:mycdn.me',
+  'domain:avito.st',
+  'domain:2gis.com',
+];
+
 /// Builds the full Xray config to connect with. With one server all
 /// traffic goes to it; with several, Xray's balancer keeps the fastest
 /// live one (leastPing over the observatory) and moves off a dead one.
 String buildConnectConfig({
   required List<Server> servers,
   required TunHost host,
-  bool ipv6 = true,
-  String logLevel = 'warning',
+  ConnectOptions options = const ConnectOptions(),
 }) {
   if (servers.isEmpty) throw ArgumentError('no servers');
   final auto = servers.length > 1;
@@ -47,14 +86,15 @@ String buildConnectConfig({
   final target = auto ? {'balancerTag': 'auto'} : {'outboundTag': 'proxy'};
   final rules = <Map<String, dynamic>>[
     {'ip': _privateCidrs, 'outboundTag': 'direct'},
+    if (options.directRu) {'domain': russianDomains, 'outboundTag': 'direct'},
     ..._panelRules(servers.first.routing, target),
     {'network': 'tcp,udp', ...target},
   ];
 
   final config = <String, dynamic>{
-    'log': {'loglevel': logLevel},
-    'dns': _dns(servers.first.dns),
-    'inbounds': [_tunInbound(host, ipv6: ipv6)],
+    'log': {'loglevel': options.logLevel, 'error': ?options.logFile},
+    'dns': _dns(servers.first.dns, options.dns),
+    'inbounds': [_tunInbound(host, ipv6: options.ipv6, dns: options.dns)],
     'outbounds': outbounds,
     'routing': {
       'domainStrategy':
@@ -82,14 +122,22 @@ String buildConnectConfig({
 }
 
 /// A config with just one server and no inbounds, for the delay test.
-String buildProbeConfig(Server server) {
+/// With [logFile] Xray writes why the server failed, for the journal.
+String buildProbeConfig(Server server, {String? logFile}) {
   return jsonEncode({
-    'log': {'loglevel': 'none'},
+    'log': logFile == null
+        ? {'loglevel': 'none'}
+        // The outbound's dial errors are logged at info level.
+        : {'loglevel': 'info', 'error': logFile, 'access': 'none'},
     'outbounds': _serverOutbounds(server, 'proxy', 'p-'),
   });
 }
 
-Map<String, dynamic> _tunInbound(TunHost host, {required bool ipv6}) {
+Map<String, dynamic> _tunInbound(
+  TunHost host, {
+  required bool ipv6,
+  required List<String> dns,
+}) {
   final settings = <String, dynamic>{'mtu': tunMtu};
   // Without IPv6 on the machine the v6 address cannot be added and the
   // whole TUN fails, so the app retries with IPv4 only.
@@ -105,7 +153,7 @@ Map<String, dynamic> _tunInbound(TunHost host, {required bool ipv6}) {
         'name': 'GateX',
         'desc': 'GateX',
         'gateway': gateway,
-        'dns': ['1.1.1.1', '8.8.8.8'],
+        'dns': dns,
         'autoSystemRoutingTable': routes,
         'autoOutboundsInterface': 'auto',
         'autoSystemWfpBlockLeak': ['dns'],
@@ -192,12 +240,9 @@ List<Map<String, dynamic>> _panelRules(
   return out;
 }
 
-Map<String, dynamic> _dns(Map<String, dynamic>? panel) {
+Map<String, dynamic> _dns(Map<String, dynamic>? panel, List<String> servers) {
   if (panel != null && !jsonEncode(panel).contains(RegExp(r'geo(ip|site):'))) {
     return panel;
   }
-  return {
-    'servers': ['1.1.1.1', '8.8.8.8'],
-    'queryStrategy': 'UseIP',
-  };
+  return {'servers': servers, 'queryStrategy': 'UseIP'};
 }
