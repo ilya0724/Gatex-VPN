@@ -227,14 +227,15 @@ section { padding-block: 56px; }
 .switch input:checked + .track::after { transform: translateX(18px); }
 .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 3px; }
 
-.plans { display: grid; gap: 14px; grid-template-columns: 1fr; }
-@media (min-width: 760px) { .plans { grid-template-columns: 1fr 1fr; } }
+.plans { display: grid; gap: 22px 14px; grid-template-columns: 1fr; padding-top: 12px; }
+@media (min-width: 700px) { .plans { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .plans { grid-template-columns: repeat(4, minmax(0, 1fr)); } .plan { padding: 24px 20px; } .price .num { font-size: 36px; } .price { flex-direction: column; align-items: flex-start; gap: 2px; } .plan .who { min-height: 3em; } .price-sub { min-height: 3em; } }
 .plan { border-radius: var(--radius-lg); padding: 26px; display: grid; gap: 18px; align-content: start; position: relative; }
 .plan.hot { border-color: rgba(46,230,166,.4); box-shadow: inset 0 1px 0 var(--glass-hi), 0 18px 50px rgba(46,230,166,.12); }
-.plan .ph { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.plan .ph { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .plan h3 { font-size: 21px; }
 .plan .who { color: var(--muted); font-size: 14.5px; margin-top: 4px; }
-.plan .badge { font-size: 12px; font-weight: 800; padding: 6px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+.plan .badge { position: absolute; top: -13px; left: 24px; font-size: 12px; font-weight: 800; padding: 6px 11px; border-radius: 999px; background: #0d3b2b; border: 1px solid rgba(46,230,166,.45); color: var(--accent); white-space: nowrap; }
 .price { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .price .num { font-family: var(--font-display); font-size: 44px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
 .price .per { color: var(--muted); font-weight: 600; }
@@ -331,7 +332,7 @@ footer .links a:hover { color: var(--text); }
       <p class="lead">GateX подключает к свободному интернету, когда мобильный оператор пускает только сайты из белого списка. Без лимита трафика, серверы в Европе, всё управление в Telegram.</p>
       <div class="cta">
         <a class="btn btn-primary" href="https://t.me/gatexvpn_bot" target="_blank" rel="noopener"><svg><use href="#i-tg"/></svg>3 дня бесплатно</a>
-        <a class="btn btn-glass" href="#pricing">Тарифы от 50 ₽</a>
+        <a class="btn btn-glass" href="#pricing">Тарифы от 49 ₽</a>
       </div>
       <div class="facts">
         <span><svg><use href="#i-check"/></svg>Без лимита трафика</span>
@@ -390,7 +391,7 @@ footer .links a:hover { color: var(--text); }
         <article class="feat glass">
           <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="11" height="16" rx="2.5"/><rect x="16" y="9" width="5" height="11" rx="1.5"/></svg></span>
           <h3>Все устройства семьи</h3>
-          <p>До 7 устройств на одной подписке: телефоны, ноутбуки, планшеты. Лишние удаляются в один клик в личном кабинете.</p>
+          <p>До 21 устройства на одной подписке: телефоны, ноутбуки, планшеты и ТВ. Лишние удаляются в один клик в личном кабинете.</p>
         </article>
         <article class="feat glass">
           <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/></svg></span>
@@ -417,7 +418,7 @@ footer .links a:hover { color: var(--text); }
         </div>
         <div class="route-note">
           <p><b>Дома и на Wi-Fi</b> всё проще: подписка подключает к ближайшему быстрому серверу в Европе, обход белых списков не нужен.</p>
-          <p><b>Обход белых списков</b> есть в тарифах с пометкой «+ обход БС» и в пробном периоде. Попробуйте бесплатно, прежде чем платить.</p>
+          <p><b>Обход белых списков</b> подключается к любому тарифу, в VIP и пробном периоде он уже есть. Попробуйте бесплатно, прежде чем платить.</p>
         </div>
       </div>
     </div>
@@ -455,7 +456,7 @@ footer .links a:hover { color: var(--text); }
       <div class="sec-head">
         <span class="eyebrow">Тарифы</span>
         <h2>Платите только за то, что нужно</h2>
-        <p>Чем дольше срок, тем дешевле месяц. Обход белых списков можно добавить к любому тарифу.</p>
+        <p>Чем дольше срок, тем дешевле месяц. Обход белых списков можно добавить к любому тарифу, в VIP он уже включён.</p>
       </div>
 
       <div class="controls">
@@ -473,34 +474,66 @@ footer .links a:hover { color: var(--text); }
       </div>
 
       <div class="plans">
-        <article class="plan glass" data-plan="eco">
+        <article class="plan glass" data-plan="economy">
           <div class="ph">
             <div><h3>Эконом</h3><p class="who">Для себя: телефон и ноутбук</p></div>
           </div>
-          <div class="price"><span class="num" data-num>100 ₽</span><span class="per" data-per>в месяц</span></div>
+          <div class="price"><span class="num" data-num></span><span class="per" data-per>в месяц</span></div>
           <p class="price-sub" data-sub></p>
           <ul>
-            <li><svg><use href="#i-check"/></svg>2 устройства, можно расширить до 8</li>
-            <li><svg><use href="#i-check"/></svg>Нидерланды, Германия, Франция, Польша</li>
+            <li><svg><use href="#i-check"/></svg>2 устройства (до 4)</li>
+            <li><svg><use href="#i-check"/></svg>Нидерланды и Германия</li>
             <li><svg><use href="#i-check"/></svg>Без лимита трафика</li>
-            <li data-bsline><svg><use href="#i-check"/></svg>Обход белых списков на LTE</li>
+            <li data-bsline><svg><use href="#i-check"/></svg><span>Обход белых списков на LTE</span></li>
           </ul>
           <a class="btn btn-glass" href="https://t.me/gatexvpn_bot" target="_blank" rel="noopener">Выбрать в боте</a>
         </article>
-        <article class="plan glass hot" data-plan="family">
+        <article class="plan glass hot" data-plan="standard">
+          <div class="ph">
+            <div><h3>Стандарт</h3><p class="who">Все страны и самый быстрый сервер</p></div>
+            <span class="badge">Оптимальный</span>
+          </div>
+          <div class="price"><span class="num" data-num></span><span class="per" data-per>в месяц</span></div>
+          <p class="price-sub" data-sub></p>
+          <ul>
+            <li><svg><use href="#i-check"/></svg>3 устройства (до 9)</li>
+            <li><svg><use href="#i-check"/></svg>Нидерланды, Германия, Франция, Польша</li>
+            <li><svg><use href="#i-check"/></svg>Режим «⚡ Авто»</li>
+            <li><svg><use href="#i-check"/></svg>Без лимита трафика</li>
+            <li data-bsline><svg><use href="#i-check"/></svg><span>Обход белых списков на LTE</span></li>
+          </ul>
+          <a class="btn btn-primary" href="https://t.me/gatexvpn_bot" target="_blank" rel="noopener">Выбрать в боте</a>
+        </article>
+        <article class="plan glass" data-plan="family">
           <div class="ph">
             <div><h3>Семейный</h3><p class="who">Для всей семьи или компании друзей</p></div>
             <span class="badge">Выгоднее на устройство</span>
           </div>
-          <div class="price"><span class="num" data-num>399 ₽</span><span class="per" data-per>в месяц</span></div>
+          <div class="price"><span class="num" data-num></span><span class="per" data-per>в месяц</span></div>
           <p class="price-sub" data-sub></p>
           <ul>
-            <li><svg><use href="#i-check"/></svg>7 устройств, можно расширить до 21</li>
-            <li><svg><use href="#i-check"/></svg>Нидерланды, Германия, Франция, Польша</li>
+            <li><svg><use href="#i-check"/></svg>7 устройств (до 21)</li>
+            <li><svg><use href="#i-check"/></svg>Все страны и режим «⚡ Авто»</li>
+            <li><svg><use href="#i-check"/></svg>Телефоны, ноутбуки и ТВ</li>
             <li><svg><use href="#i-check"/></svg>Без лимита трафика</li>
-            <li data-bsline><svg><use href="#i-check"/></svg>Обход белых списков на LTE</li>
+            <li data-bsline><svg><use href="#i-check"/></svg><span>Обход белых списков на LTE</span></li>
           </ul>
-          <a class="btn btn-primary" href="https://t.me/gatexvpn_bot" target="_blank" rel="noopener">Выбрать в боте</a>
+          <a class="btn btn-glass" href="https://t.me/gatexvpn_bot" target="_blank" rel="noopener">Выбрать в боте</a>
+        </article>
+        <article class="plan glass" data-plan="vip">
+          <div class="ph">
+            <div><h3>VIP</h3><p class="who">Всё включено</p></div>
+          </div>
+          <div class="price"><span class="num" data-num></span><span class="per" data-per>в месяц</span></div>
+          <p class="price-sub" data-sub></p>
+          <ul>
+            <li><svg><use href="#i-check"/></svg>5 устройств (до 10)</li>
+            <li><svg><use href="#i-check"/></svg>Все страны и режим «⚡ Авто»</li>
+            <li><svg><use href="#i-check"/></svg>Поддержка вне очереди</li>
+            <li><svg><use href="#i-check"/></svg>Без лимита трафика</li>
+            <li data-bsline><svg><use href="#i-check"/></svg><span>Обход белых списков на LTE</span></li>
+          </ul>
+          <a class="btn btn-glass" href="https://t.me/gatexvpn_bot" target="_blank" rel="noopener">Выбрать в боте</a>
         </article>
       </div>
 
@@ -508,7 +541,7 @@ footer .links a:hover { color: var(--text); }
         <p><b>Не уверены?</b> Первые 3 дня бесплатно: 2 устройства и обход белых списков, без оплаты и карты.</p>
         <a class="btn btn-primary btn-sm" href="https://t.me/gatexvpn_bot" target="_blank" rel="noopener"><svg><use href="#i-tg"/></svg>Попробовать</a>
       </div>
-      <p class="fine">Цены в рублях. Оплата в Telegram-боте через СБП или криптовалютой. Дополнительные устройства покупаются пакетами по цене тарифа.</p>
+      <p class="fine">Цены в рублях. Оплата в личном кабинете бота через СБП или криптовалютой. Дополнительные устройства покупаются пакетами по цене тарифа.</p>
     </div>
   </section>
 
@@ -529,15 +562,19 @@ footer .links a:hover { color: var(--text); }
         </details>
         <details class="glass">
           <summary>Нужен ли обход белых списков, если у меня домашний интернет?</summary>
-          <p>Нет. Дома и на Wi-Fi хватит тарифа без обхода, он в два раза дешевле. Обход нужен, если вы пользуетесь мобильным интернетом там, где оператор включает белые списки.</p>
+          <p>Нет. Дома и на Wi-Fi хватит тарифа без обхода, он заметно дешевле. Обход нужен, если вы пользуетесь мобильным интернетом там, где оператор включает белые списки.</p>
         </details>
         <details class="glass">
           <summary>Как оплатить?</summary>
-          <p>В боте <a href="https://t.me/gatexvpn_bot" target="_blank" rel="noopener">@gatexvpn_bot</a> через СБП или криптовалютой. Карту привязывать не нужно, автосписаний нет.</p>
+          <p>В личном кабинете бота <a href="https://t.me/gatexvpn_bot" target="_blank" rel="noopener">@gatexvpn_bot</a>: кнопка «Купить подписку», дальше тариф, срок и оплата через СБП или криптовалютой. Карту привязывать не нужно, автосписаний нет.</p>
         </details>
         <details class="glass">
           <summary>Можно ли поменять тариф?</summary>
           <p>Да. При смене тарифа оставшиеся дни пересчитываются в дни нового тарифа по стоимости, ничего не сгорает.</p>
+        </details>
+        <details class="glass">
+          <summary>Есть ли бонус за друзей?</summary>
+          <p>Да. Пригласите друга по своей ссылке из бота: когда он включит пробный период, вы оба получите +7 дней подписки.</p>
         </details>
         <details class="glass">
           <summary>Что делать, если не подключается?</summary>
@@ -576,10 +613,13 @@ footer .links a:hover { color: var(--text); }
 
 <script>
 (function () {
-  // Prices in rubles, same table as the bot's plans.py (TARIFFS_PLAN_2026-10-17).
+  // Prices in rubles for one device pack, same table as the bot's plans.py.
+  // A plan without "base" is sold only with the whitelist bypass (VIP).
   var PRICES = {
-    eco:    { base: { 1: 50,  3: 135,  6: 255,  12: 450  }, bs: { 1: 100, 3: 270,  6: 510,  12: 900  } },
-    family: { base: { 1: 199, 3: 539,  6: 999,  12: 1790 }, bs: { 1: 399, 3: 1079, 6: 1990, 12: 3590 } }
+    economy:  { base: { 1: 49,  3: 129, 6: 249, 12: 439  }, bs: { 1: 99,  3: 269,  6: 499,  12: 890  } },
+    standard: { base: { 1: 99,  3: 269, 6: 499, 12: 890  }, bs: { 1: 179, 3: 479,  6: 909,  12: 1590 } },
+    family:   { base: { 1: 199, 3: 539, 6: 999, 12: 1790 }, bs: { 1: 399, 3: 1079, 6: 1990, 12: 3590 } },
+    vip:      {                                             bs: { 1: 399, 3: 1079, 6: 1990, 12: 3590 } }
   };
   var months = 1;
   var bs = document.getElementById('bs');
@@ -588,23 +628,23 @@ footer .links a:hover { color: var(--text); }
   var word = { 1: 'в месяц', 3: 'за 3 месяца', 6: 'за 6 месяцев', 12: 'за 12 месяцев' };
 
   function render() {
-    var key = bs.checked ? 'bs' : 'base';
     document.querySelectorAll('.plan').forEach(function (card) {
       var p = PRICES[card.dataset.plan];
-      var total = p[key][months];
+      var withBs = bs.checked || !p.base;
+      var row = withBs ? p.bs : p.base;
+      var total = row[months];
       card.querySelector('[data-num]').textContent = fmt(total);
       card.querySelector('[data-per]').textContent = word[months];
       var sub = card.querySelector('[data-sub]');
       if (months === 1) {
-        sub.textContent = bs.checked ? 'С обходом белых списков' : 'Без обхода белых списков';
+        sub.textContent = !p.base ? 'Обход белых списков уже включён' : (withBs ? 'С обходом белых списков' : 'Без обхода белых списков');
       } else {
-        var full = p[key][1] * months;
-        sub.textContent = '≈ ' + fmt(Math.round(total / months)) + ' в месяц, экономия ' + fmt(full - total);
+        sub.textContent = '≈ ' + fmt(Math.round(total / months)) + ' в месяц, экономия ' + fmt(row[1] * months - total);
       }
       var line = card.querySelector('[data-bsline]');
-      line.classList.toggle('dim', !bs.checked);
-      line.querySelector('use').setAttribute('href', bs.checked ? '#i-check' : '#i-minus');
-      line.lastChild.textContent = bs.checked ? 'Обход белых списков на LTE' : 'Без обхода белых списков';
+      line.classList.toggle('dim', !withBs);
+      line.querySelector('use').setAttribute('href', withBs ? '#i-check' : '#i-minus');
+      line.querySelector('span').textContent = withBs ? 'Обход белых списков на LTE' : 'Без обхода белых списков';
     });
   }
   period.addEventListener('click', function (e) {
