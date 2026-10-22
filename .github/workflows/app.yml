@@ -63,8 +63,9 @@ jobs:
           echo "NDK: $ANDROID_NDK_HOME"
           $log gomobile-init gomobile init
           mkdir -p ../app/android/app/libs
+          # wlynxg/anet (pulled in by pion/stun) links to net internals on Android.
           $log gomobile-bind gomobile bind -target=android/arm64,android/arm,android/amd64 \
-            -androidapi 24 -trimpath -ldflags="-s -w -buildid=" \
+            -androidapi 24 -trimpath -ldflags="-s -w -buildid= -checklinkname=0" \
             -o ../app/android/app/libs/gatexcore.aar ./gatexcore
       - uses: subosito/flutter-action@v2
         with:
