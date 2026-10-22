@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/ilya0724/gatex-vpn/core/gatexcore"
 )
@@ -47,6 +48,12 @@ func main() {
 	case "run":
 		fail(gatexcore.Start(readConfig(*configPath), 0))
 		fmt.Println("started")
+		// The app shows the speed from these.
+		go func() {
+			for range time.Tick(time.Second) {
+				fmt.Println("traffic", gatexcore.Traffic())
+			}
+		}()
 		wait(*watchStdin)
 		fail(gatexcore.Stop())
 	default:

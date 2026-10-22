@@ -1,7 +1,14 @@
+import 'dart:convert';
+
+import 'share_link.dart' show decodeBase64Loose;
+
 /// One server from the subscription, already turned into Xray outbounds.
 class Server {
+  /// [name] may carry Happ's `Name?serverDescription=<base64>` form, which
+  /// Remnawave uses for the host's description; it is split off here.
   Server({
-    required this.name,
+    required String name,
+    String? description,
     required this.address,
     required this.port,
     required this.protocol,
@@ -10,7 +17,28 @@ class Server {
     this.extraOutbounds = const [],
     this.routing,
     this.dns,
-  });
+  }) : name = _splitDescription(name).$1,
+       description = _nonEmpty(description) ?? _splitDescription(name).$2;
+
+  static (String, String?) _splitDescription(String raw) {
+    final i = raw.indexOf('?serverDescription=');
+    if (i < 0) return (raw, null);
+    final value = raw.substring(i + '?serverDescription='.length).trim();
+    String? text;
+    try {
+      text = utf8.decode(decodeBase64Loose(Uri.decodeComponent(value)));
+    } on Object {
+      text = value;
+    }
+    return (raw.substring(0, i).trim(), _nonEmpty(text));
+  }
+
+  static String? _nonEmpty(String? s) =>
+      s == null || s.trim().isEmpty ? null : s.trim();
+
+  /// The host's description from the panel ("Для YouTube и игр"), shown
+  /// under the name the way Happ shows it.
+  final String? description;
 
   /// Display name, usually "🇩🇪 Германия" from the panel.
   final String name;
@@ -53,15 +81,14 @@ class Server {
     return '';
   }
 
-  /// The name without the flag and decorative emoji ("✨ Германия").
+  /// The name without the leading flag, which the list draws as a badge.
+  /// Other emoji stay: they are part of how the panel names the server.
   String get title {
     final f = flag;
-    final rest = f.isEmpty ? name : name.substring(f.length);
-    final clean = rest
-        .replaceAllMapped(_decor, (m) => m[0] == '№' ? '№' : '')
+    final rest = (f.isEmpty ? name : name.substring(f.length))
         .replaceAll(RegExp(r'\s{2,}'), ' ')
         .trim();
-    return clean.isEmpty ? name.trim() : clean;
+    return rest.isEmpty ? name.trim() : rest;
   }
 
   /// Two-letter country code from the flag emoji, or from the name when
@@ -90,11 +117,6 @@ class Server {
   bool get isLte => name.toUpperCase().contains('LTE');
 
   static bool _isRegional(int r) => r >= 0x1F1E6 && r <= 0x1F1FF;
-
-  static final _decor = RegExp(
-    r'[\p{So}\p{Sk}\p{Cs}\u{FE0F}\u{200D}\u{1F1E6}-\u{1F1FF}\u{1F3FB}-\u{1F3FF}\u{E0020}-\u{E007F}]',
-    unicode: true,
-  );
 }
 
 /// Country names for the server list, by ISO code.

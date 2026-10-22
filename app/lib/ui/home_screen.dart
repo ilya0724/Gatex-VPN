@@ -339,6 +339,19 @@ class _PlanCard extends StatelessWidget {
                 ),
             ],
           ),
+          if (sub.total == 0 && used > 0) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Icon(Icons.data_usage_rounded, size: 16, color: GX.muted),
+                const SizedBox(width: 6),
+                Text(
+                  'Трафик: ${formatBytes(used)} · без лимита',
+                  style: body(12, color: GX.muted),
+                ),
+              ],
+            ),
+          ],
           if (sub.total > 0) ...[
             const SizedBox(height: 12),
             ClipRRect(
@@ -354,7 +367,7 @@ class _PlanCard extends StatelessWidget {
             Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                'Трафик: ${_gb(used)} из ${_gb(sub.total)}',
+                'Трафик: ${formatBytes(used)} из ${formatBytes(sub.total)}',
                 style: body(12, color: GX.muted),
               ),
             ),
@@ -376,9 +389,6 @@ class _PlanCard extends StatelessWidget {
         : 'дней';
     return '$n $word';
   }
-
-  static String _gb(int bytes) =>
-      '${(bytes / (1 << 30)).toStringAsFixed(1)} ГБ';
 }
 
 /// The button with the status and the session timer under it.
@@ -480,6 +490,13 @@ class _ConnectBlockState extends State<_ConnectBlock> {
             weight: since != null ? 700 : 500,
           ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
         ),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeOutCubic,
+          child: since == null
+              ? const SizedBox(width: double.infinity)
+              : _LiveInfo(state: state),
+        ),
       ],
     );
   }
@@ -516,8 +533,9 @@ class _ServerTile extends StatelessWidget {
                 Text(
                   s == null
                       ? 'Самый быстрый из ${_servers(state.servers.length)}'
-                      : s.transport,
+                      : s.description ?? s.transport,
                   style: body(12.5, color: GX.muted),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -624,3 +642,109 @@ class _LinksRow extends StatelessWidget {
 
 String _servers(int n) =>
     n % 10 == 1 && n % 100 != 11 ? '$n сервера' : '$n серверов';
+
+/// Under the timer while connected: speed both ways, traffic of this
+/// session, and the address sites see.
+class _LiveInfo extends StatelessWidget {
+  const _LiveInfo({required this.state});
+  final AppState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final tabular = const [FontFeature.tabularFigures()];
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Column(
+        children: [
+          ValueListenableBuilder(
+            valueListenable: state.live,
+            builder: (context, live, _) => Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _Pill(
+                  icon: Icons.south_rounded,
+                  color: GX.accent,
+                  text: '${formatBytes(live?.downSpeed ?? 0)}/с',
+                  tabular: tabular,
+                ),
+                _Pill(
+                  icon: Icons.north_rounded,
+                  color: GX.accent2,
+                  text: '${formatBytes(live?.upSpeed ?? 0)}/с',
+                  tabular: tabular,
+                ),
+                _Pill(
+                  icon: Icons.data_usage_rounded,
+                  color: GX.muted,
+                  text: formatBytes((live?.up ?? 0) + (live?.down ?? 0)),
+                  tabular: tabular,
+                ),
+              ],
+            ),
+          ),
+          ValueListenableBuilder(
+            valueListenable: state.exit,
+            builder: (context, exit, _) => AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: exit == null
+                  ? const SizedBox(height: 8)
+                  : Padding(
+                      key: ValueKey(exit.ip),
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          FlagBadge(code: exit.countryCode, size: 18),
+                          const SizedBox(width: 8),
+                          SelectableText(
+                            '${exit.ip} · ${exit.country}',
+                            style: body(12.5, color: GX.muted),
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  const _Pill({
+    required this.icon,
+    required this.color,
+    required this.text,
+    required this.tabular,
+  });
+  final IconData icon;
+  final Color color;
+  final String text;
+  final List<FontFeature> tabular;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: GX.glass,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: GX.line),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: body(12.5, weight: 700).copyWith(fontFeatures: tabular),
+          ),
+        ],
+      ),
+    );
+  }
+}

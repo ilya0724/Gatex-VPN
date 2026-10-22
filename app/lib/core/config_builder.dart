@@ -104,6 +104,11 @@ String buildConnectConfig({
     'dns': _dns(servers.first.dns, options.dns),
     'inbounds': [_tunInbound(host, ipv6: options.ipv6, dns: options.dns)],
     'outbounds': outbounds,
+    // Counters for the TUN inbound only: the speed and traffic on screen.
+    'stats': <String, dynamic>{},
+    'policy': {
+      'system': {'statsInboundUplink': true, 'statsInboundDownlink': true},
+    },
     'routing': {
       'domainStrategy':
           (servers.first.routing?['domainStrategy'] as String?) ?? 'AsIs',

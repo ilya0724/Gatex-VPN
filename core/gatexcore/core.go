@@ -18,9 +18,10 @@ import (
 	"sync"
 	"time"
 
+	xnet "github.com/xtls/xray-core/common/net"
 	"github.com/xtls/xray-core/common/platform"
 	"github.com/xtls/xray-core/core"
-	xnet "github.com/xtls/xray-core/common/net"
+	"github.com/xtls/xray-core/features/stats"
 
 	// Registers every Xray protocol, transport and the JSON config loader.
 	_ "github.com/xtls/xray-core/main/distro/all"
@@ -79,6 +80,71 @@ func IsRunning() bool {
 	return instance != nil
 }
 
+func running() *core.Instance {
+	mu.Lock()
+	defer mu.Unlock()
+	return instance
+}
+
+// Traffic returns the bytes that went up and down through the tunnel since
+// Start, as "up down", or "" when nothing runs. The config turns on stats
+// for the TUN inbound only, so nothing is counted twice.
+func Traffic() string {
+	inst := running()
+	if inst == nil {
+		return ""
+	}
+	m, _ := inst.GetFeature(stats.ManagerType()).(stats.Manager)
+	if m == nil {
+		return ""
+	}
+	var up, down int64
+	m.VisitCounters(func(name string, c stats.Counter) bool {
+		switch {
+		case strings.HasSuffix(name, ">>>traffic>>>uplink"):
+			up += c.Value()
+		case strings.HasSuffix(name, ">>>traffic>>>downlink"):
+			down += c.Value()
+		}
+		return true
+	})
+	return fmt.Sprintf("%d %d", up, down)
+}
+
+// Fetch GETs url through the running tunnel, by its routing rules, and
+// returns the body. The app's own traffic bypasses the TUN on Android, so
+// this is how it sees the internet the way the tunnel does.
+func Fetch(url string, timeoutMs int) (string, error) {
+	inst := running()
+	if inst == nil {
+		return "", errors.New("core is not running")
+	}
+	client := proxyClient(inst, time.Duration(timeoutMs)*time.Millisecond)
+	resp, err := client.Get(url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	return string(body), err
+}
+
+func proxyClient(inst *core.Instance, timeout time.Duration) *http.Client {
+	return &http.Client{
+		Timeout: timeout,
+		Transport: &http.Transport{
+			MaxIdleConnsPerHost: 1,
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				dest, err := xnet.ParseDestination(network + ":" + addr)
+				if err != nil {
+					return nil, err
+				}
+				return core.Dial(ctx, inst, dest)
+			},
+		},
+	}
+}
+
 // Version returns the Xray-core version compiled in.
 func Version() string {
 	return core.Version()
@@ -95,26 +161,36 @@ func CheckConfig(configJSON string) error {
 // returns the round trip in milliseconds. It returns -1 and an error when
 // the server does not answer within timeoutMs.
 func MeasureDelay(configJSON string, probeURL string, timeoutMs int) (int, error) {
+	// Some transports can hang past the HTTP timeouts (or in Close), which
+	// left the app's spinner turning forever; the caller always gets an
+	// answer by this deadline.
+	type result struct {
+		ms  int
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		ms, err := measureDelay(configJSON, probeURL, timeoutMs)
+		done <- result{ms, err}
+	}()
+	timeout := time.Duration(timeoutMs) * time.Millisecond
+	select {
+	case r := <-done:
+		return r.ms, r.err
+	case <-time.After(2*timeout + 3*time.Second):
+		return -1, errors.New("probe timed out")
+	}
+}
+
+func measureDelay(configJSON string, probeURL string, timeoutMs int) (int, error) {
 	inst, err := core.StartInstance("json", []byte(configJSON))
 	if err != nil {
 		return -1, err
 	}
-	defer inst.Close()
+	defer func() { go inst.Close() }()
 
 	timeout := time.Duration(timeoutMs) * time.Millisecond
-	client := &http.Client{
-		Timeout: timeout,
-		Transport: &http.Transport{
-			MaxIdleConnsPerHost: 1,
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				dest, err := xnet.ParseDestination(network + ":" + addr)
-				if err != nil {
-					return nil, err
-				}
-				return core.Dial(ctx, inst, dest)
-			},
-		},
-	}
+	client := proxyClient(inst, timeout)
 	get := func() error {
 		resp, err := client.Get(probeURL)
 		if err != nil {

@@ -61,6 +61,20 @@ class MainActivity : FlutterActivity() {
                     }
                 }
                 "version" -> result.success(Gatexcore.version())
+                // The service runs in this process, so the core is shared.
+                "traffic" -> result.success(Gatexcore.traffic())
+                "fetch" -> {
+                    val url = call.argument<String>("url")!!
+                    val timeout = call.argument<Int>("timeout") ?: 8000
+                    thread {
+                        val body: String? = try {
+                            Gatexcore.fetch(url, timeout.toLong())
+                        } catch (e: Exception) {
+                            null
+                        }
+                        runOnUiThread { result.success(body) }
+                    }
+                }
                 else -> result.notImplemented()
             }
         }

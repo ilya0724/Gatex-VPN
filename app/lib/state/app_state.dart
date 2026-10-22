@@ -402,11 +402,68 @@ class AppState extends ChangeNotifier {
       if (s.state == VpnState.disconnected) log('Отключено');
     }
     vpnState = s.state;
+    _syncLive();
     if (s.error != null) {
       error = _humanError(s.error!);
       log('Ядро остановилось: ${s.error}', error: true);
     }
     notifyListeners();
+  }
+
+  /// Speed and traffic of the running tunnel, updated every second.
+  final live = ValueNotifier<LiveStats?>(null);
+
+  /// The address sites see while connected, and its country.
+  final exit = ValueNotifier<ExitInfo?>(null);
+  Timer? _liveTimer;
+  (int, int)? _lastTraffic;
+
+  void _syncLive() {
+    if (connected && _liveTimer == null) {
+      _lastTraffic = null;
+      _liveTimer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+      unawaited(_lookupExit());
+    } else if (!connected && _liveTimer != null) {
+      _liveTimer?.cancel();
+      _liveTimer = null;
+      live.value = null;
+      exit.value = null;
+    }
+  }
+
+  Future<void> _tick() async {
+    final t = await core.traffic();
+    if (t == null || !connected) return;
+    final last = _lastTraffic;
+    _lastTraffic = t;
+    live.value = LiveStats(
+      up: t.$1,
+      down: t.$2,
+      upSpeed: last == null ? 0 : max(0, t.$1 - last.$1),
+      downSpeed: last == null ? 0 : max(0, t.$2 - last.$2),
+    );
+  }
+
+  Future<void> _lookupExit() async {
+    for (var i = 0; i < 3 && connected; i++) {
+      await Future<void>.delayed(Duration(seconds: 1 + i * 3));
+      final body = await core.fetch(
+        'http://ip-api.com/json/?fields=status,query,country,countryCode&lang=ru',
+      );
+      try {
+        final j = jsonDecode(body ?? '') as Map<String, dynamic>;
+        if (j['status'] == 'success' && connected) {
+          exit.value = ExitInfo(
+            ip: j['query'] as String,
+            countryCode: j['countryCode'] as String? ?? '',
+            country: j['country'] as String? ?? '',
+          );
+          return;
+        }
+      } on Object {
+        // Try again: the tunnel may still be settling.
+      }
+    }
   }
 
   String _humanError(String raw) {
@@ -497,4 +554,25 @@ class AppState extends ChangeNotifier {
     error = null;
     notifyListeners();
   }
+}
+
+class LiveStats {
+  const LiveStats({
+    required this.up,
+    required this.down,
+    required this.upSpeed,
+    required this.downSpeed,
+  });
+
+  /// Bytes since connecting, and bytes in the last second.
+  final int up, down, upSpeed, downSpeed;
+}
+
+class ExitInfo {
+  const ExitInfo({
+    required this.ip,
+    required this.countryCode,
+    required this.country,
+  });
+  final String ip, countryCode, country;
 }

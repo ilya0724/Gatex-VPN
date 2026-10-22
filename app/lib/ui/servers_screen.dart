@@ -145,6 +145,15 @@ class _ServerListState extends State<ServerList> {
         runSpacing: 4,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
+          if (s.description != null)
+            Text(
+              s.description!,
+              style: body(
+                12.5,
+                weight: 600,
+                color: GX.text.withValues(alpha: 0.8),
+              ),
+            ),
           Text(s.transport, style: body(12, color: GX.muted)),
           if (s.isLte) TagChip('LTE', color: GX.warn),
           if (failure != null)

@@ -66,4 +66,25 @@ class AndroidCore implements VpnCore {
   @override
   Future<String> coreVersion() async =>
       await _methods.invokeMethod<String>('version') ?? '';
+
+  @override
+  Future<(int, int)?> traffic() async {
+    try {
+      return parseTraffic(await _methods.invokeMethod<String>('traffic'));
+    } on PlatformException {
+      return null;
+    }
+  }
+
+  @override
+  Future<String?> fetch(String url) async {
+    try {
+      return await _methods.invokeMethod<String>('fetch', {
+        'url': url,
+        'timeout': 8000,
+      });
+    } on PlatformException {
+      return null;
+    }
+  }
 }

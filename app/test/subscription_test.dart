@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gatex/core/config_builder.dart';
+import 'package:gatex/subscription/share_link.dart';
 import 'package:gatex/subscription/subscription.dart';
 
 const realityLink =
@@ -165,6 +166,35 @@ void main() {
     expect(tls(wsLink, '&alpn=h2').containsKey('alpn'), isFalse);
     expect(tls(grpcTrojan, '&alpn=http/1.1')['alpn'], ['h2', 'http/1.1']);
     expect(tls(xhttpLink)['alpn'], ['h2', 'http/1.1']);
+  });
+
+  test('Happ server descriptions are split off the name', () {
+    final desc = base64.encode(utf8.encode('Для YouTube'));
+    final link =
+        'vless://3f1b2c4d-1111-2222-3333-444455556666@1.2.3.4:443?type=tcp&security=none'
+        '#${Uri.encodeComponent('🇫🇷 ✨ Франция №1')}?serverDescription=$desc';
+    final s = parseShareLink(link)!;
+    expect(s.name, '🇫🇷 ✨ Франция №1');
+    expect(s.title, '✨ Франция №1');
+    expect(s.description, 'Для YouTube');
+    expect(s.countryCode, 'FR');
+
+    final json = serverFromXrayConfig({
+      'remarks': '🇩🇪 Германия',
+      'meta': {'serverDescription': 'Быстрый'},
+      'outbounds': [
+        {
+          'tag': 'proxy',
+          'protocol': 'vless',
+          'settings': {
+            'vnext': [
+              {'address': '5.6.7.8', 'port': 443, 'users': []},
+            ],
+          },
+        },
+      ],
+    })!;
+    expect(json.description, 'Быстрый');
   });
 
   test('generated configs pass the real Xray core', () async {

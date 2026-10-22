@@ -23,6 +23,14 @@ class DelayResult {
   final String? error;
 }
 
+/// "up down" from the core's Traffic().
+(int, int)? parseTraffic(String? text) {
+  final parts = text?.trim().split(' ') ?? const [];
+  if (parts.length != 2) return null;
+  final up = int.tryParse(parts[0]), down = int.tryParse(parts[1]);
+  return up == null || down == null ? null : (up, down);
+}
+
 /// The platform side that runs Xray: a library inside an Android
 /// VpnService, or the gatex-core helper process on desktop.
 abstract class VpnCore {
@@ -46,4 +54,10 @@ abstract class VpnCore {
   Future<DelayResult> measureDelay(String configJson, {int timeoutMs});
 
   Future<String> coreVersion();
+
+  /// Bytes up and down through the tunnel since it started, null when off.
+  Future<(int, int)?> traffic();
+
+  /// GETs [url] the way the tunnel routes it. Null when that fails.
+  Future<String?> fetch(String url);
 }

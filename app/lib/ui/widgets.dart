@@ -10,6 +10,19 @@ import 'theme.dart';
 Future<void> openLink(String url) =>
     launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
 
+/// 950 Б, 12,4 КБ, 3,1 МБ, 1,25 ГБ.
+String formatBytes(num bytes) {
+  const units = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+  var v = bytes.toDouble();
+  var i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  final digits = i == 0 || v >= 100 ? 0 : (v >= 10 ? 1 : 2);
+  return '${v.toStringAsFixed(digits).replaceAll('.', ',')} ${units[i]}';
+}
+
 Color delayColor(int ms) => ms < 300
     ? GX.accent
     : ms < 800

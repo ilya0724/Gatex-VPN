@@ -173,6 +173,7 @@ Server? serverFromXrayConfig(Map<String, dynamic> config) {
   final security = stream['security'] ?? 'none';
   return Server(
     name: (config['remarks'] as String?) ?? address,
+    description: (config['meta'] as Map?)?['serverDescription'] as String?,
     address: address,
     port: port,
     protocol: main['protocol'] as String,

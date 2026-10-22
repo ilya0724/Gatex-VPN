@@ -19,6 +19,9 @@ class DesktopCore implements VpnCore {
   Process? _process;
   bool _stopping = false;
 
+  /// The helper prints its counters every second.
+  (int, int)? _traffic;
+
   @override
   TunHost get tunHost => Platform.isWindows ? TunHost.windows : TunHost.linux;
 
@@ -136,6 +139,8 @@ Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | ForE
     ) {
       if (line.trim() == 'started' && !started.isCompleted) {
         started.complete(null);
+      } else if (line.startsWith('traffic ')) {
+        _traffic = parseTraffic(line.substring(8));
       }
     });
     p.stderr.transform(utf8.decoder).listen(errors.write);
@@ -146,6 +151,7 @@ Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | ForE
         return;
       }
       _process = null;
+      _traffic = null;
       final requested = _stopping;
       _stopping = false;
       _status.add(
@@ -197,7 +203,7 @@ Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | ForE
       configJson,
     );
     try {
-      final r = await Process.run(_corePath, [
+      final r = await _runWithDeadline([
         'delay',
         '-c',
         file.path,
@@ -205,7 +211,7 @@ Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | ForE
         probeUrl,
         '-timeout',
         '$timeoutMs',
-      ]);
+      ], Duration(milliseconds: timeoutMs * 2 + 5000));
       // Xray prints notices (e.g. "WebSocket is deprecated") to stdout
       // before its log settings apply, so the delay is the last bare number.
       final numbers = RegExp(
@@ -224,6 +230,46 @@ Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | ForE
     } finally {
       file.deleteSync();
     }
+  }
+
+  @override
+  Future<(int, int)?> traffic() async => _process == null ? null : _traffic;
+
+  /// The app's own requests go through the TUN on desktop.
+  @override
+  Future<String?> fetch(String url) async {
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
+    try {
+      final req = await client.getUrl(Uri.parse(url));
+      final resp = await req.close().timeout(const Duration(seconds: 8));
+      return await resp.transform(utf8.decoder).join();
+    } on Object {
+      return null;
+    } finally {
+      client.close(force: true);
+    }
+  }
+
+  /// Process.run that kills the helper when it overstays: a probe stuck in
+  /// a transport must not keep its server "checking" forever.
+  Future<ProcessResult> _runWithDeadline(
+    List<String> args,
+    Duration deadline,
+  ) async {
+    final p = await Process.start(_corePath, args);
+    final out = p.stdout.transform(utf8.decoder).join();
+    final err = p.stderr.transform(utf8.decoder).join();
+    final code = await p.exitCode.timeout(
+      deadline,
+      onTimeout: () {
+        p.kill(ProcessSignal.sigkill);
+        return -1;
+      },
+    );
+    if (code == -1) {
+      return ProcessResult(p.pid, -1, '', 'probe timed out');
+    }
+    return ProcessResult(p.pid, code, await out, await err);
   }
 
   @override

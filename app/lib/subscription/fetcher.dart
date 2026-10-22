@@ -24,8 +24,15 @@ class DeviceInfo {
       ? 'Windows'
       : 'Linux';
 
+  /// Remnawave sends host descriptions ("serverDescription") and the
+  /// format Happ gets only to the clients it lists as extended, matched by
+  /// the start of the User-Agent. Happ's servers are the ones known to
+  /// work, so the app asks as Happ and names itself after it.
+  String get userAgent => 'Happ/3.10.0 GateX/$appVersion ($os)';
+  String get ownUserAgent => 'GateX/$appVersion ($os)';
+
   Map<String, String> get headers => {
-    'User-Agent': 'GateX/$appVersion ($os)',
+    'User-Agent': userAgent,
     'x-hwid': hwid,
     'x-device-os': os,
     'x-ver-os': Platform.operatingSystemVersion,
@@ -57,16 +64,35 @@ class RawSubscription {
   );
 }
 
+int _serverCount(http.Response r) {
+  try {
+    return parseServers(utf8.decode(r.bodyBytes, allowMalformed: true)).length;
+  } on Object {
+    return 0;
+  }
+}
+
 Future<RawSubscription> fetchSubscription(String url, DeviceInfo device) async {
   final uri = Uri.tryParse(url.trim());
   if (uri == null || !uri.hasScheme || !uri.scheme.startsWith('http')) {
     throw SubscriptionException('Это не похоже на ссылку подписки');
   }
-  final http.Response resp;
+  http.Response resp;
   try {
     resp = await http
         .get(uri, headers: device.headers)
         .timeout(const Duration(seconds: 20));
+    // A panel with its own rule for Happ may answer in a form the app
+    // cannot read; then ask once more under the app's own name.
+    if (resp.statusCode != 200 || _serverCount(resp) == 0) {
+      final again = await http
+          .get(
+            uri,
+            headers: {...device.headers, 'User-Agent': device.ownUserAgent},
+          )
+          .timeout(const Duration(seconds: 20));
+      if (again.statusCode == 200 && _serverCount(again) > 0) resp = again;
+    }
   } on Exception {
     throw SubscriptionException(
       'Не удалось загрузить подписку. Проверьте интернет и попробуйте ещё раз',

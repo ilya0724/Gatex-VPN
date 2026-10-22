@@ -35,7 +35,7 @@ class DelayFailure {
         ? 'Нет маршрута до сервера'
         : has('connection reset') || has('forcibly closed')
         ? 'Соединение сброшено, возможна блокировка'
-        : has('timeout') || has('deadline exceeded')
+        : has('timeout') || has('timed out') || has('deadline exceeded')
         ? 'Сервер не ответил вовремя'
         : has('tls') || has('handshake')
         ? 'Ошибка TLS-рукопожатия'
