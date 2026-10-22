@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -109,7 +110,7 @@ class AppState extends ChangeNotifier {
     appVersion = info.version;
     device = DeviceInfo(
       appVersion: appVersion,
-      hwid: _hwid(),
+      hwid: await _step('устройство', _hwid),
       model: await _step('модель устройства', _deviceModel),
     );
     initStep = 'подписка';
@@ -188,17 +189,56 @@ class AppState extends ChangeNotifier {
     if (reconnect && connected) await _reconnect();
   }
 
-  String _hwid() {
-    var id = _prefs.getString('hwid');
-    if (id == null) {
+  /// The id the panel counts devices by. Kept once made; new installs
+  /// derive it from the system's own id, so reinstalling the app does not
+  /// make the device look new (the bot rewards one install per device).
+  Future<String> _hwid() async {
+    final saved = _prefs.getString('hwid');
+    if (saved != null) return saved;
+    final system = await _systemId();
+    final String id;
+    if (system != null && system.isNotEmpty) {
+      id = sha256
+          .convert(utf8.encode('gatex:$system'))
+          .toString()
+          .substring(0, 32);
+    } else {
       final r = Random.secure();
       id = List.generate(
         16,
         (_) => r.nextInt(256).toRadixString(16).padLeft(2, '0'),
       ).join();
-      _prefs.setString('hwid', id);
     }
+    await _prefs.setString('hwid', id);
     return id;
+  }
+
+  Future<String?> _systemId() async {
+    try {
+      if (Platform.isAndroid) {
+        return await _app.invokeMethod<String>('deviceId');
+      }
+      if (Platform.isWindows) {
+        final r = await Process.run('reg', [
+          'query',
+          r'HKLM\SOFTWARE\Microsoft\Cryptography',
+          '/v',
+          'MachineGuid',
+        ]);
+        return RegExp(r'MachineGuid\s+REG_SZ\s+(\S+)')
+            .firstMatch('${r.stdout}')
+            ?.group(1);
+      }
+      if (Platform.isLinux) {
+        for (final path in ['/etc/machine-id', '/var/lib/dbus/machine-id']) {
+          final f = File(path);
+          if (f.existsSync()) return f.readAsStringSync().trim();
+        }
+      }
+    } on Object {
+      // A random id below still works, it just changes on reinstall.
+    }
+    return null;
   }
 
   Future<String> _deviceModel() async {

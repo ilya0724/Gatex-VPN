@@ -100,6 +100,13 @@ class MainActivity : FlutterActivity() {
                         initialLink = null
                     }
                     "deviceModel" -> result.success("${Build.MANUFACTURER} ${Build.MODEL}")
+                    // Same across reinstalls (per signing key and user).
+                    "deviceId" -> result.success(
+                        android.provider.Settings.Secure.getString(
+                            contentResolver,
+                            android.provider.Settings.Secure.ANDROID_ID,
+                        ),
+                    )
                     else -> result.notImplemented()
                 }
             }

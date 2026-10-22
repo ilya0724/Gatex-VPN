@@ -190,6 +190,15 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      # Fixed names too, so the bot and the site can link to
+      # releases/latest/download/<name> and never change the link.
+      - name: Stable names
+        run: |
+          cd dist
+          cp GateX-Setup-*.exe GateX-Setup.exe
+          cp GateX-universal.apk GateX.apk
+          cp gatex_*_amd64.deb gatex_amd64.deb
+          ls -la
       - name: Checksums
         run: cd dist && sha256sum * > SHA256SUMS.txt
       - uses: softprops/action-gh-release@v2
