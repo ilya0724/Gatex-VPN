@@ -22,7 +22,7 @@ don't re-do it.
 The app fetches the subscription with these headers, and Remnawave stores the device in its
 HWID list (the cabinet already reads it via `GET {RW}/hwid/devices/{uuid or id}`):
 
-- `User-Agent: Happ/3.10.0 GateX/1.3.0 (Android)` (also `(Windows)`, `(Linux)`; on a retry plain `GateX/1.3.0 (Android)`)
+- `User-Agent: Happ/3.10.0 GateX/1.3.0 (Android)` (starts with Happ/ on purpose, so match with *contains*, never startswith) (also `(Windows)`, `(Linux)`; on a retry plain `GateX/1.3.0 (Android)`)
 - `x-hwid`, `x-device-os: Android|Windows|Linux`, `x-device-model`
 
 So a device counts as «GateX installed» when its `userAgent` contains `gatex/` (case-insensitive)
@@ -55,7 +55,8 @@ Banner `connect`. Caption (HTML, keep under 1024 chars):
   there is one). No panel user: replace the link line with
   «Сначала получите пробный период: подпишитесь на канал в начале бота».
 - Buttons: `🪟 Windows` · `🤖 Android` (one row), `🐧 Linux (.deb)`, `⭐ Задание +30 дней`
-  (opens «Задания»), `◀️ Назад`. Download buttons are URL buttons from `.env`.
+  (opens «Задания»), `◀️ Назад`. Download buttons are URL buttons from `.env`. Android = arm64 build (lighter); add a caption line
+  «Если APK не ставится на старом телефоне, <a href="{android_all}">возьмите универсальный</a>.»
 - Store `app_screen_opened_at` on the user when the screen opens (used by the sweep in 4).
 
 ## 3. Task in «Задания»
@@ -102,12 +103,13 @@ Run the same check; on success grant and send the success message with the `task
 GATEX_APP_ENABLED=admin      # 0 = hidden, admin = only ADMIN_ID sees screen and task, 1 = everyone
 APP_BONUS_DAYS=30
 GATEX_APP_URL_WINDOWS=https://github.com/ilya0724/Gatex-VPN/releases/latest/download/GateX-Setup.exe
-GATEX_APP_URL_ANDROID=https://github.com/ilya0724/Gatex-VPN/releases/latest/download/GateX.apk
+GATEX_APP_URL_ANDROID=https://github.com/ilya0724/Gatex-VPN/releases/latest/download/GateX-arm64.apk
+GATEX_APP_URL_ANDROID_ALL=https://github.com/ilya0724/Gatex-VPN/releases/latest/download/GateX.apk
 GATEX_APP_URL_LINUX=https://github.com/ilya0724/Gatex-VPN/releases/latest/download/gatex_amd64.deb
 ```
 
 Read them at use time (no restart needed to flip `GATEX_APP_ENABLED`), like `REMINDERS_ENABLED`.
-The release with these file names doesn't exist yet; it comes from the app thread. Deploy with
+The app thread's CI already has a release job on tag v* with exactly these names (plus versioned files and SHA256SUMS.txt); the first tag comes after Ilya confirms 1.3 works. Deploy with
 `GATEX_APP_ENABLED=admin`.
 
 ## 6. Test, then restart
