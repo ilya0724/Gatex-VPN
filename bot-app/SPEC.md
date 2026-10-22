@@ -1,7 +1,7 @@
-# GateX bot: download the GateX app + task «+30 дней за установку»
+# GateX bot: download the GateX app + task «+{APP_BONUS_DAYS} дней за установку»
 
 Asked by Ilya on 2026-10-22: Happ stays the main app, our GateX app (Windows, Linux, Android)
-is an optional fallback in the bot, and a new task gives +30 days for installing it on a PC or
+is an optional fallback in the bot, and a new task gives +14 days for installing it on a PC or
 an Android phone.
 
 Bot: NL `/root/vpn_bot` (aiogram 3.30.0, Python 3.12), service `vpn_bot`. Texts live in `i18n.py`.
@@ -48,13 +48,13 @@ Banner `connect`. Caption (HTML, keep under 1024 chars):
 3. Нажмите «Подключить».</blockquote>
 🔑 Ваша ссылка: <code>{sub_url}</code>
 
-⭐ За установку +30 дней, см. «Задания».
+⭐ За установку +{APP_BONUS_DAYS} дней, см. «Задания».
 ```
 
 - `{sub_url}`: the same subscription URL the bot/cabinet gives to Happ (subscription proxy if
   there is one). No panel user: replace the link line with
   «Сначала получите пробный период: подпишитесь на канал в начале бота».
-- Buttons: `🪟 Windows` · `🤖 Android` (one row), `🐧 Linux (.deb)`, `⭐ Задание +30 дней`
+- Buttons: `🪟 Windows` · `🤖 Android` (one row), `🐧 Linux (.deb)`, `⭐ Задание +{APP_BONUS_DAYS} дней`
   (opens «Задания»), `◀️ Назад`. Download buttons are URL buttons from `.env`. Android = arm64 build (lighter); add a caption line
   «Если APK не ставится на старом телефоне, <a href="{android_all}">возьмите универсальный</a>.»
 - Store `app_screen_opened_at` on the user when the screen opens (used by the sweep in 4).
@@ -64,9 +64,9 @@ Banner `connect`. Caption (HTML, keep under 1024 chars):
 Add a second block under the nick task:
 
 ```
-<blockquote><b>📲 Приложение GateX · +30 дней</b>
+<blockquote><b>📲 Приложение GateX · +{APP_BONUS_DAYS} дней</b>
 Установите GateX на компьютер или Android, добавьте в него свою ссылку подписки и нажмите «Проверить приложение». Один раз на аккаунт.</blockquote>
-Статус: {⏳ не выполнено | ✅ выполнено, +30 дней начислено}
+Статус: {⏳ не выполнено | ✅ выполнено, +{APP_BONUS_DAYS} дней начислено}
 ```
 
 Buttons: `✅ Проверить приложение` (callback), `📲 Скачать GateX` (opens the screen in 2).
@@ -82,12 +82,12 @@ Hide the block and buttons once granted? No: keep it with ✅ status, drop the c
   `sha256("gatex-app:" + hwid)`; store user id, platform, time. If the insert hits a duplicate,
   undo the user flip and answer «Это устройство уже получило бонус на другом аккаунте.»
   If the user has several GateX devices, try them in order until one is new.
-- Grant +`APP_BONUS_DAYS` (default 30) with the existing helper the nick/referral bonus uses
+- Grant +`APP_BONUS_DAYS` (default 14, changed from 30 by Ilya on 2026-10-22; all texts take the number from it) with the existing helper the nick/referral bonus uses
   (panel expireAt + Mongo). If the subscription has expired, count from now, never from the past.
 - If granting days fails after the flips, undo both flips and tell the user to try later.
 - No revoke when the app is removed later (the panel can't tell reliably).
 - «Проверить приложение» rate limit: once per 30 s per user.
-- Success: «🎉 GateX найден ({Android|Windows|Linux}) — +30 дней. Подписка до {date}.»
+- Success: «🎉 GateX найден ({Android|Windows|Linux}) — +{APP_BONUS_DAYS} дней. Подписка до {date}.»
   Not found: «Пока не вижу GateX среди ваших устройств. Откройте приложение, вставьте ссылку подписки и через минуту нажмите «Проверить» ещё раз.»
 - Admin notification on each grant: one line with user id, platform, new date.
 
@@ -101,7 +101,7 @@ Run the same check; on success grant and send the success message with the `task
 
 ```
 GATEX_APP_ENABLED=admin      # 0 = hidden, admin = only ADMIN_ID sees screen and task, 1 = everyone
-APP_BONUS_DAYS=30
+APP_BONUS_DAYS=14
 GATEX_APP_URL_WINDOWS=https://github.com/ilya0724/Gatex-VPN/releases/latest/download/GateX-Setup.exe
 GATEX_APP_URL_ANDROID=https://github.com/ilya0724/Gatex-VPN/releases/latest/download/GateX-arm64.apk
 GATEX_APP_URL_ANDROID_ALL=https://github.com/ilya0724/Gatex-VPN/releases/latest/download/GateX.apk
