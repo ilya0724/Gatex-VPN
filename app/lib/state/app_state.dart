@@ -296,6 +296,7 @@ class AppState extends ChangeNotifier {
     final logFile = File(coreLogPath);
     // A fresh log per connection keeps the journal about this session.
     if (logFile.existsSync()) logFile.deleteSync();
+    final serverIps = await _resolveServers();
     String config({required bool ipv6}) => buildConnectConfig(
       servers: chosen != null ? [chosen] : servers,
       host: core.tunHost,
@@ -304,6 +305,7 @@ class AppState extends ChangeNotifier {
         directRu: settings.directRu,
         dns: settings.dns.servers,
         logFile: coreLogPath,
+        serverIps: serverIps,
       ),
     );
     vpnState = VpnState.connecting;
@@ -322,6 +324,21 @@ class AppState extends ChangeNotifier {
       log('Ошибка подключения: $failure', error: true);
       notifyListeners();
     }
+  }
+
+  /// IPs of every server, looked up before the tunnel is up. Android
+  /// skips this: the app's own traffic is outside its VPN anyway.
+  Future<List<String>> _resolveServers() async {
+    if (Platform.isAndroid) return const [];
+    final ips = <String>{};
+    await Future.wait([
+      for (final host in {for (final s in servers) s.address})
+        InternetAddress.lookup(host)
+            .timeout(const Duration(seconds: 3))
+            .then((list) => ips.addAll(list.map((a) => a.address)))
+            .catchError((_) => ips),
+    ]);
+    return ips.toList();
   }
 
   /// Turned off for the session once the system refuses an IPv6 address.

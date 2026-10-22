@@ -30,6 +30,7 @@ class ConnectOptions {
     this.dns = const ['1.1.1.1', '8.8.8.8'],
     this.logFile,
     this.logLevel = 'warning',
+    this.serverIps = const [],
   });
 
   final bool ipv6;
@@ -42,6 +43,11 @@ class ConnectOptions {
   /// Where Xray writes its error log, shown in the app's journal.
   final String? logFile;
   final String logLevel;
+
+  /// The servers' own IPs. Traffic to them from other programs (the delay
+  /// test) goes direct, so a test while connected measures the server and
+  /// not a detour through the current tunnel.
+  final List<String> serverIps;
 }
 
 /// Domains of Russian services, matched with their subdomains. Most sit
@@ -86,6 +92,8 @@ String buildConnectConfig({
   final target = auto ? {'balancerTag': 'auto'} : {'outboundTag': 'proxy'};
   final rules = <Map<String, dynamic>>[
     {'ip': _privateCidrs, 'outboundTag': 'direct'},
+    if (options.serverIps.isNotEmpty)
+      {'ip': options.serverIps, 'outboundTag': 'direct'},
     if (options.directRu) {'domain': russianDomains, 'outboundTag': 'direct'},
     ..._panelRules(servers.first.routing, target),
     {'network': 'tcp,udp', ...target},

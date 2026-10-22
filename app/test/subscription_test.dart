@@ -189,6 +189,7 @@ void main() {
             directRu: false,
             dns: ['9.9.9.9'],
             logFile: 'core.log',
+            serverIps: ['1.2.3.4', '2001:db8::1'],
           ),
         ),
       for (var i = 0; i < servers.length; i++)
