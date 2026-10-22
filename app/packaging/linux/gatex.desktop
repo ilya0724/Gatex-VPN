@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=GateX VPN
+Comment=VPN GateX
+Exec=/opt/gatex/gatex %u
+Icon=gatex
+Categories=Network;
+MimeType=x-scheme-handler/gatex;
+Terminal=false

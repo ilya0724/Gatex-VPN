@@ -1,0 +1,194 @@
+name: GateX app
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    tags: ["v*"]
+    paths: ["app/**", "core/**", ".github/workflows/app.yml"]
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: "3.47.7"
+  WINTUN_VERSION: "0.14.1"
+  WINTUN_SHA256: "07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+      - name: Build gatex-core
+        working-directory: core
+        run: |
+          go vet ./...
+          go build -o "$RUNNER_TEMP/gatex-core" ./cmd/gatex-core
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Analyze and test
+        working-directory: app
+        env:
+          GATEX_CORE: ${{ runner.temp }}/gatex-core
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test
+
+  android:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Build gatexcore.aar
+        working-directory: core
+        run: |
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          go install golang.org/x/mobile/cmd/gobind@latest
+          go get golang.org/x/mobile/bind
+          export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          gomobile init
+          mkdir -p ../app/android/app/libs
+          gomobile bind -v -target=android/arm64,android/arm,android/amd64 \
+            -androidapi 24 -trimpath -ldflags="-s -w -buildid=" \
+            -o ../app/android/app/libs/gatexcore.aar ./gatexcore
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Release key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        if: env.KEYSTORE_BASE64 != ''
+        working-directory: app/android
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > release.jks
+          cat > key.properties <<EOF
+          storeFile=release.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+      - name: Build APKs
+        working-directory: app
+        run: |
+          flutter build apk --release
+          mv build/app/outputs/flutter-apk/app-release.apk "$RUNNER_TEMP/GateX-universal.apk"
+          flutter build apk --release --split-per-abi
+          mkdir -p dist
+          mv "$RUNNER_TEMP/GateX-universal.apk" dist/
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk dist/GateX-arm64.apk
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk dist/GateX-armv7.apk
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GateX-android
+          path: app/dist/*.apk
+
+  windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Build app
+        working-directory: app
+        run: flutter build windows --release
+      - name: Add gatex-core and Wintun
+        shell: pwsh
+        run: |
+          $out = "app/build/windows/x64/runner/Release"
+          Push-Location core
+          # windowsgui: no console window pops up when the app starts it.
+          go build -trimpath -ldflags "-s -w -H=windowsgui" -o "../$out/gatex-core.exe" ./cmd/gatex-core
+          Pop-Location
+          Invoke-WebRequest "https://www.wintun.net/builds/wintun-$env:WINTUN_VERSION.zip" -OutFile wintun.zip
+          $hash = (Get-FileHash wintun.zip -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne $env:WINTUN_SHA256) { throw "wintun.zip hash mismatch: $hash" }
+          Expand-Archive wintun.zip -DestinationPath wintun
+          Copy-Item wintun/wintun/bin/amd64/wintun.dll "$out/"
+      - name: Installer
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path app/pubspec.yaml -Pattern '^version:\s*([0-9.]+)').Matches[0].Groups[1].Value
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          $src = (Resolve-Path app/build/windows/x64/runner/Release).Path
+          $icon = (Resolve-Path app/windows/runner/resources/app_icon.ico).Path
+          & $iscc "/DAppVersion=$version" "/DSourceDir=$src" "/DIconFile=$icon" "/Odist" app/packaging/windows/gatex.iss
+          Compress-Archive -Path "$src/*" -DestinationPath "dist/GateX-$version-windows-portable.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GateX-windows
+          path: dist/*
+
+  linux:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Build
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+          cd app && flutter build linux --release && cd ..
+          bundle=app/build/linux/x64/release/bundle
+          (cd core && go build -trimpath -ldflags "-s -w" -o "../$bundle/gatex-core" ./cmd/gatex-core)
+          version=$(sed -n 's/^version:[[:space:]]*\([0-9.]*\).*/\1/p' app/pubspec.yaml)
+          app/packaging/linux/build-deb.sh "$bundle" "$version" dist
+          tar -C "$bundle" -czf "dist/GateX-$version-linux-x64.tar.gz" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GateX-linux
+          path: dist/*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [android, windows, linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
