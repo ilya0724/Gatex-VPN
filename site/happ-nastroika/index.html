@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Как настроить Happ: подписка VPN на iPhone, Android и ПК | GateX</title>
+<meta name="description" content="Пошаговая инструкция: как установить Happ, добавить подписку VPN одной кнопкой или по ссылке, выбрать сервер и что делать, если подписка не обновляется.">
+<meta name="theme-color" content="#06110e">
+<meta property="og:title" content="Как настроить Happ: подписка VPN на iPhone, Android и ПК | GateX">
+<meta property="og:description" content="Пошаговая инструкция: как установить Happ, добавить подписку VPN одной кнопкой или по ссылке, выбрать сервер и что делать, если подписка не обновляется.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://gatexx.ru/happ-nastroika/">
+<meta property="og:image" content="https://gatexx.ru/og.png">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:site_name" content="GateX VPN">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="https://gatexx.ru/happ-nastroika/">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" href="/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="/assets/guide.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "Article", "headline": "Как настроить Happ и добавить подписку VPN", "description": "Пошаговая инструкция: как установить Happ, добавить подписку VPN одной кнопкой или по ссылке, выбрать сервер и что делать, если подписка не обновляется.", "inLanguage": "ru", "mainEntityOfPage": "https://gatexx.ru/happ-nastroika/", "image": "https://gatexx.ru/og.png", "datePublished": "2026-10-31", "dateModified": "2026-10-31", "author": {"@type": "Organization", "name": "GateX VPN", "url": "https://gatexx.ru/", "logo": "https://gatexx.ru/apple-touch-icon.png"}, "publisher": {"@type": "Organization", "name": "GateX VPN", "url": "https://gatexx.ru/", "logo": "https://gatexx.ru/apple-touch-icon.png"}}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Главная", "item": "https://gatexx.ru/"}, {"@type": "ListItem", "position": 2, "name": "Инструкции", "item": "https://gatexx.ru/instrukcii/"}, {"@type": "ListItem", "position": 3, "name": "Настройка Happ", "item": "https://gatexx.ru/happ-nastroika/"}]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Happ платный?", "acceptedAnswer": {"@type": "Answer", "text": "Нет, приложение бесплатное. Платите только за подписку GateX, если она вам подошла."}}, {"@type": "Question", "name": "Можно ли пользоваться одной подпиской на нескольких устройствах?", "acceptedAnswer": {"@type": "Answer", "text": "Да. Количество устройств зависит от тарифа: от 2 на «Экономе» до 7 на «Семейном», можно докупить пакеты."}}, {"@type": "Question", "name": "Нужно ли добавлять подписку заново после продления?", "acceptedAnswer": {"@type": "Answer", "text": "Нет. Ссылка остаётся той же, приложение подхватит новый срок само."}}, {"@type": "Question", "name": "Можно ли вместо Happ использовать другое приложение?", "acceptedAnswer": {"@type": "Answer", "text": "Да, v2RayTun и INCY тоже подходят. Для Windows и Android есть приложение GateX, оно скачивается в боте."}}]}</script>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="gxMint" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6ff9cb"/><stop offset="1" stop-color="#18b98a"/></linearGradient>
+    <!-- GX mark, letter outlines only -->
+    <g id="gxMark">
+      <g transform="scale(1 -1)" fill="none" stroke-linejoin="round">
+        <path stroke="#eaf5f0" d="M838 325Q835 257 810.5 195.5Q786 134 739.5 86.0Q693 38 623.5 11.0Q554 -16 462 -16Q374 -16 297.0 9.5Q220 35 161.5 85.0Q103 135 70.5 208.0Q38 281 38 375Q38 469 71.0 542.0Q104 615 163.5 665.0Q223 715 301.5 740.5Q380 766 473 766Q597 766 687.0 728.0Q777 690 832.0 624.0Q887 558 903 471H694Q684 509 653.5 536.5Q623 564 577.5 578.5Q532 593 474 593Q404 593 353.0 568.5Q302 544 274.0 495.5Q246 447 246 375Q246 302 276.0 252.0Q306 202 361.5 177.0Q417 152 492 152Q565 152 621.0 172.5Q677 193 710.5 233.0Q744 273 749 329ZM512 242V388H910V0H763L734 297L773 242Z"/>
+        <path stroke="url(#gxMint)" transform="translate(961 0)" d="M513 327V453L881 0H626L383 314H485L241 0H-11L359 452V328L11 750H270L490 466H388L605 750H860Z"/>
+      </g>
+    </g>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M6 12h12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+    <symbol id="i-tg" viewBox="0 0 24 24"><path d="M21.5 4.2L2.9 11.4c-1 .4-1 1.6.1 1.9l4.7 1.5 1.8 5.6c.3.8 1.3 1 1.9.4l2.6-2.5 4.9 3.6c.7.5 1.7.1 1.9-.8l3.1-15.4c.2-1-.8-1.8-1.7-1.4zM9.6 14.3l8.2-7.2-6.9 8.6-.3 3.1-1-4.5z" fill="currentColor"/></symbol>
+  </defs>
+</svg>
+<div class="sky" aria-hidden="true"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
+<header class="top">
+  <div class="wrap">
+    <div class="bar glass">
+      <a class="brand" href="/" aria-label="GateX VPN, главная">
+        <span class="gx"><svg viewBox="0 -800 1900 840"><use href="#gxMark"/></svg></span>
+        <span>Gate<b>X</b></span>
+      </a>
+      <nav class="nav" aria-label="Разделы">
+        <a href="/vpn-belye-spiski/">Белые списки</a>
+        <a href="/happ-nastroika/">Настройка Happ</a>
+        <a href="/#pricing">Тарифы</a>
+        <a href="/instrukcii/">Инструкции</a>
+      </nav>
+      <a class="btn btn-primary btn-sm" href="https://t.me/gatexvpn_bot" target="_blank" rel="noopener"><svg><use href="#i-tg"/></svg>Открыть бота</a>
+    </div>
+  </div>
+</header>
+<main>
+  <div class="wrap">
+    <nav class="crumbs" aria-label="Навигация"><a href="/">Главная</a><span aria-hidden="true">/</span><a href="/instrukcii/">Инструкции</a><span aria-hidden="true">/</span><span>Настройка Happ</span></nav>
+    <article class="doc">
+      <header class="doc-head">
+        <h1>Как настроить Happ и добавить подписку VPN</h1>
+        <p class="lead">Happ — бесплатное приложение для iPhone, Android, Windows и macOS, через которое подключается GateX. Настройка занимает пару минут, ничего вводить вручную не нужно.</p>
+        <p class="meta">Обновлено 31 октября 2026</p>
+        <div class="cta">
+          <a class="btn btn-primary" href="https://t.me/gatexvpn_bot" target="_blank" rel="noopener"><svg><use href="#i-tg"/></svg>3 дня бесплатно</a>
+          <a class="btn btn-glass" href="/#pricing">Тарифы от 49 ₽</a>
+        </div>
+      </header>
+      <nav class="toc glass" aria-label="Содержание"><b>Содержание</b><ol><li><a href="#ustanovka">Шаг 1. Установите Happ</a></li><li><a href="#podpiska">Шаг 2. Получите подписку в боте</a></li><li><a href="#dobavit">Шаг 3. Добавьте подписку в Happ</a></li><li><a href="#vklyuchit">Шаг 4. Выберите сервер и включите VPN</a></li><li><a href="#problemy">Если что-то не работает</a></li><li><a href="#faq">Частые вопросы</a></li></ol></nav>
+      <div class="prose">
+<h2 id="ustanovka">Шаг 1. Установите Happ</h2>
+
+<ul>
+<li><b>iPhone и iPad:</b> найдите Happ в App Store.</li>
+<li><b>Android:</b> Happ есть в Google Play.</li>
+<li><b>Windows и macOS:</b> версия для компьютера есть на сайте разработчика Happ.</li>
+</ul>
+<p>Если Happ не находится в вашем магазине приложений, подойдут v2RayTun или INCY: подписка GateX работает
+в них так же. Для Windows и Android есть и наше приложение GateX, его можно скачать прямо в боте.</p>
+<h2 id="podpiska">Шаг 2. Получите подписку в боте</h2>
+
+<div class="steps in-doc"><article class="step glass"><span class="n">1</span><h3>Откройте бота</h3><p>Запустите <a href="https://t.me/gatexvpn_bot" target="_blank" rel="noopener">@gatexvpn_bot</a> и нажмите «Старт».</p></article><article class="step glass"><span class="n">2</span><h3>Включите пробный период</h3><p>3 дня бесплатно, без карты. Или выберите тариф и оплатите через СБП.</p></article><article class="step glass"><span class="n">3</span><h3>Нажмите «🔗 Подключиться»</h3><p>Откроется личный кабинет со статусом подписки и кнопкой добавления в приложение.</p></article></div>
+<h2 id="dobavit">Шаг 3. Добавьте подписку в Happ</h2>
+
+<h3>Способ 1: одной кнопкой</h3>
+<p>В личном кабинете нажмите кнопку добавления в Happ. Телефон спросит, открыть ли приложение, согласитесь.
+Подписка появится в Happ со всеми серверами.</p>
+<h3>Способ 2: по ссылке</h3>
+<ol>
+<li>В личном кабинете откройте профиль и скопируйте ссылку подписки.</li>
+<li>В Happ нажмите «+» в правом верхнем углу.</li>
+<li>Выберите вставку из буфера обмена.</li>
+</ol>
+<p>Этот способ удобен на компьютере и если кнопка в кабинете не открыла приложение.</p>
+<h2 id="vklyuchit">Шаг 4. Выберите сервер и включите VPN</h2>
+
+<p>В списке серверов выберите «⚡ Авто», чтобы приложение само подбирало самый быстрый, или конкретную страну.
+Затем нажмите большую кнопку подключения. На iPhone при первом запуске система попросит разрешить
+добавление VPN-конфигурации, разрешите.</p>
+<p>На мобильном интернете при белых списках выбирайте серверы с пометкой LTE. Почему так, мы объяснили
+в статье о <a href="/vpn-belye-spiski/">белых списках</a>.</p>
+<h2 id="problemy">Если что-то не работает</h2>
+
+<ul>
+<li><b>Подписка не обновляется.</b> Потяните список серверов вниз или нажмите кнопку обновления. Если не помогает,
+в профиле личного кабинета есть резервные ссылки «Резервная 1» и «Резервная 2»: добавьте одну из них
+тем же способом.</li>
+<li><b>Пишет, что превышен лимит устройств.</b> В личном кабинете удалите старое устройство, которым
+больше не пользуетесь, и обновите подписку.</li>
+<li><b>Подключается, но сайты не открываются.</b> Выберите другой сервер или «⚡ Авто». Проверьте, не включён ли
+одновременно другой VPN.</li>
+<li><b>Нужно подключить роутер.</b> В профиле личного кабинета есть отдельная ссылка «Для роутера».</li>
+</ul>
+<p>Больше причин и решений в статье «<a href="/vpn-ne-rabotaet-na-mobilnom/">VPN не работает на мобильном интернете</a>».</p>
+<h2 id="faq">Частые вопросы</h2>
+      </div>
+      <div class="faq doc-faq">
+        <details class="glass"><summary>Happ платный?</summary><p>Нет, приложение бесплатное. Платите только за подписку GateX, если она вам подошла.</p></details>
+        <details class="glass"><summary>Можно ли пользоваться одной подпиской на нескольких устройствах?</summary><p>Да. Количество устройств зависит от тарифа: от 2 на «Экономе» до 7 на «Семейном», можно докупить пакеты.</p></details>
+        <details class="glass"><summary>Нужно ли добавлять подписку заново после продления?</summary><p>Нет. Ссылка остаётся той же, приложение подхватит новый срок само.</p></details>
+        <details class="glass"><summary>Можно ли вместо Happ использовать другое приложение?</summary><p>Да, v2RayTun и INCY тоже подходят. Для Windows и Android есть приложение GateX, оно скачивается в боте.</p></details>
+      </div>
+    </article>
+  </div>
+  <section>
+    <div class="wrap">
+      <div class="sec-head"><span class="eyebrow">Ещё по теме</span><h2>Другие инструкции</h2></div>
+      <div class="related"><a class="feat glass" href="/vpn-belye-spiski/"><h3>VPN при белых списках</h3><p>Почему обычный VPN перестаёт работать, когда оператор оставляет только разрешённые сайты, и как подключиться.</p><span class="go">Читать →</span></a><a class="feat glass" href="/vpn-krym/"><h3>VPN для Крыма</h3><p>Какие сервисы не работают с крымскими адресами, как дела у местных операторов и что проверить в пробный период.</p><span class="go">Читать →</span></a><a class="feat glass" href="/vpn-ne-rabotaet-na-mobilnom/"><h3>VPN не работает на мобильном интернете</h3><p>Семь частых причин, почему VPN подключается на Wi-Fi, но молчит на LTE, и что делать в каждом случае.</p><span class="go">Читать →</span></a></div>
+    </div>
+  </section>
+  <section>
+    <div class="wrap">
+      <div class="final glass">
+        <h2>Проверьте GateX на своём телефоне</h2>
+        <p>3 дня бесплатно, без карты. Если не подойдёт, просто ничего не оплачивайте.</p>
+        <div class="cta">
+          <a class="btn btn-primary" href="https://t.me/gatexvpn_bot" target="_blank" rel="noopener"><svg><use href="#i-tg"/></svg>Открыть @gatexvpn_bot</a>
+          <a class="btn btn-glass" href="https://t.me/gatexvpn_support" target="_blank" rel="noopener">Написать в поддержку</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+<footer>
+  <div class="wrap">
+    <div class="row">
+      <a class="brand" href="/"><span class="gx"><svg viewBox="0 -800 1900 840"><use href="#gxMark"/></svg></span><span>Gate<b>X</b> VPN</span></a>
+      <div class="links">
+        <a href="/instrukcii/">Инструкции</a>
+        <a href="https://t.me/gatexvpn_bot" target="_blank" rel="noopener">Бот @gatexvpn_bot</a>
+        <a href="https://t.me/gatexvpn_support" target="_blank" rel="noopener">Поддержка @gatexvpn_support</a>
+        <a href="https://t.me/gaatex_vpn" target="_blank" rel="noopener">Канал</a>
+      </div>
+      <span>© 2026 GateX</span>
+    </div>
+  </div>
+</footer>
+</body>
+</html>

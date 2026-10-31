@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>GateX VPN</title>
+<title>GateX VPN: работает при белых списках на мобильном интернете</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="description" content="GateX VPN работает даже при белых списках на мобильном интернете. Серверы в Нидерландах, Германии, Франции и Польше, без лимита трафика. 3 дня бесплатно в Telegram-боте.">
 <meta name="theme-color" content="#06110e">
@@ -13,10 +13,14 @@
 <meta property="og:url" content="https://gatexx.ru/">
 <meta property="og:image" content="https://gatexx.ru/og.png">
 <meta property="og:locale" content="ru_RU">
+<meta property="og:site_name" content="GateX VPN">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="canonical" href="https://gatexx.ru/">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2306110e'/%3E%3Ctext x='32' y='42' font-family='Arial Black,Arial' font-weight='900' font-size='26' text-anchor='middle' fill='none' stroke='%232ee6a6' stroke-width='2.4'%3EGX%3C/text%3E%3C/svg%3E">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "Organization", "name": "GateX VPN", "url": "https://gatexx.ru/", "logo": "https://gatexx.ru/apple-touch-icon.png", "sameAs": ["https://t.me/gatexvpn_bot", "https://t.me/gaatex_vpn"]}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebSite", "name": "GateX VPN", "url": "https://gatexx.ru/", "inLanguage": "ru"}</script>
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Что такое белые списки?", "acceptedAnswer": {"@type": "Answer", "text": "Это режим, в котором мобильный оператор открывает только разрешённые сайты и сервисы: Госуслуги, банки, маркетплейсы, VK. Всё остальное, включая обычные VPN, перестаёт открываться. Он включается в отдельных регионах, иногда на несколько часов, иногда постоянно."}}, {"@type": "Question", "name": "На каких устройствах работает GateX?", "acceptedAnswer": {"@type": "Answer", "text": "На iPhone, Android, Windows и macOS. Подписка добавляется в приложение Happ, v2RayTun или INCY одной кнопкой из личного кабинета."}}, {"@type": "Question", "name": "Нужен ли обход белых списков, если у меня домашний интернет?", "acceptedAnswer": {"@type": "Answer", "text": "Нет. Дома и на Wi-Fi хватит тарифа без обхода, он заметно дешевле. Обход нужен, если вы пользуетесь мобильным интернетом там, где оператор включает белые списки."}}, {"@type": "Question", "name": "Как оплатить?", "acceptedAnswer": {"@type": "Answer", "text": "В личном кабинете бота @gatexvpn_bot: кнопка «Купить подписку», дальше тариф, срок и оплата через СБП или криптовалютой. Карту привязывать не нужно, автосписаний нет."}}, {"@type": "Question", "name": "Можно ли поменять тариф?", "acceptedAnswer": {"@type": "Answer", "text": "Да. При смене тарифа оставшиеся дни пересчитываются в дни нового тарифа по стоимости, ничего не сгорает."}}, {"@type": "Question", "name": "Есть ли бонус за друзей?", "acceptedAnswer": {"@type": "Answer", "text": "Да. Пригласите друга по своей ссылке из бота: когда он включит пробный период, вы оба получите +7 дней подписки."}}, {"@type": "Question", "name": "Что делать, если не подключается?", "acceptedAnswer": {"@type": "Answer", "text": "Напишите в поддержку @gatexvpn_support: опишите оператора, город и приложение, и мы поможем настроить."}}]}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Unbounded:wght@500;600;700&display=swap">
@@ -174,6 +178,9 @@ section { padding-block: 56px; }
 .feat .ic svg { width: 22px; height: 22px; }
 .feat h3 { font-size: 17px; line-height: 1.3; margin-top: 6px; }
 .feat p { color: var(--muted); font-size: 15px; }
+.feat .go { color: var(--accent); font-weight: 700; font-size: 14.5px; }
+@media (min-width: 980px) { .features.guides { grid-template-columns: repeat(4, 1fr); } }
+a.feat:hover { border-color: rgba(46,230,166,.4); }
 
 /* Whitelist route */
 .route { border-radius: var(--radius-lg); padding: 28px 22px; display: grid; gap: 26px; }
@@ -311,10 +318,10 @@ footer .links a:hover { color: var(--text); }
         <span>Gate<b>X</b></span>
       </a>
       <nav class="nav" aria-label="Разделы">
-        <a href="#why">Почему GateX</a>
         <a href="#whitelist">Белые списки</a>
         <a href="#start">Как подключиться</a>
         <a href="#pricing">Тарифы</a>
+        <a href="/instrukcii/">Инструкции</a>
         <a href="#faq">Вопросы</a>
       </nav>
       <a class="btn btn-primary btn-sm" href="https://t.me/gatexvpn_bot" target="_blank" rel="noopener">
@@ -584,6 +591,38 @@ footer .links a:hover { color: var(--text); }
     </div>
   </section>
 
+  <section id="guides">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="eyebrow">Инструкции</span>
+        <h2>Помогаем подключиться</h2>
+        <p>Короткие инструкции для частых ситуаций. Все статьи в разделе <a href="/instrukcii/" style="color:var(--accent);font-weight:700">Инструкции</a>.</p>
+      </div>
+      <div class="features guides">
+        <a class="feat glass" href="/vpn-belye-spiski/">
+          <h3>VPN при белых списках</h3>
+          <p>Почему обычный VPN перестаёт работать, когда оператор оставляет только разрешённые сайты.</p>
+          <span class="go">Читать →</span>
+        </a>
+        <a class="feat glass" href="/vpn-krym/">
+          <h3>VPN для Крыма</h3>
+          <p>Какие сервисы не работают с крымскими адресами и как дела у местных операторов.</p>
+          <span class="go">Читать →</span>
+        </a>
+        <a class="feat glass" href="/happ-nastroika/">
+          <h3>Как настроить Happ</h3>
+          <p>Пошаговая настройка на iPhone, Android и компьютере.</p>
+          <span class="go">Читать →</span>
+        </a>
+        <a class="feat glass" href="/vpn-ne-rabotaet-na-mobilnom/">
+          <h3>VPN не работает на LTE</h3>
+          <p>Семь частых причин и что делать в каждом случае.</p>
+          <span class="go">Читать →</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
   <section>
     <div class="wrap">
       <div class="final glass">
@@ -603,6 +642,7 @@ footer .links a:hover { color: var(--text); }
     <div class="row">
       <a class="brand" href="#top"><span class="gx"><svg viewBox="0 -800 1900 840"><use href="#gxMark"/></svg></span><span>Gate<b>X</b> VPN</span></a>
       <div class="links">
+        <a href="/instrukcii/">Инструкции</a>
         <a href="https://t.me/gatexvpn_bot" target="_blank" rel="noopener">Бот @gatexvpn_bot</a>
         <a href="https://t.me/gatexvpn_support" target="_blank" rel="noopener">Поддержка @gatexvpn_support</a>
       </div>

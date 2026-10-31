@@ -16,3 +16,9 @@ RewriteRule ^(.*)$ https://gatexx.ru/$1 [R=301,L]
   ExpiresByType image/png "access plus 30 days"
   ExpiresByType image/x-icon "access plus 30 days"
 </IfModule>
+
+ErrorDocument 404 /404.html
+
+<IfModule mod_expires.c>
+  ExpiresByType text/css "access plus 7 days"
+</IfModule>
