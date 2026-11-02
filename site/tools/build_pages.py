@@ -20,6 +20,7 @@ BASE = "https://gatexx.ru"
 BOT = "https://t.me/gatexvpn_bot"
 SUPPORT = "https://t.me/gatexvpn_support"
 CHANNEL = "https://t.me/gaatex_vpn"
+CABINET = "https://t.me/gatexvpn_bot?startapp"  # personal cabinet; keep in sync with index.html
 TRIAL = "4 дня"  # keep in sync with the bot and index.html
 UPDATED = "2026-11-02"
 UPDATED_RU = "2 ноября 2026"
@@ -96,6 +97,7 @@ def build_css():
 SVG_DEFS = index[index.index('<svg width="0"'):index.index("</svg>", index.index("</defs>")) + 6]
 LOGO = '<span class="gx"><svg viewBox="0 -800 1900 840"><use href="#gxMark"/></svg></span>'
 TG = '<svg><use href="#i-tg"/></svg>'
+USER_IC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></svg>'
 
 
 def header():
@@ -112,7 +114,10 @@ def header():
         <a href="/#pricing">Тарифы</a>
         <a href="/instrukcii/">Инструкции</a>
       </nav>
-      <a class="btn btn-primary btn-sm" href="{BOT}" target="_blank" rel="noopener">{TG}Открыть бота</a>
+      <div class="top-cta">
+        <a class="btn btn-glass btn-sm btn-cab" href="{CABINET}" target="_blank" rel="noopener" aria-label="Личный кабинет">{USER_IC}<span>Кабинет</span></a>
+        <a class="btn btn-primary btn-sm" href="{BOT}" target="_blank" rel="noopener">{TG}Открыть бота</a>
+      </div>
     </div>
   </div>
 </header>"""
@@ -125,6 +130,7 @@ def footer():
       <a class="brand" href="/">{LOGO}<span>Gate<b>X</b> VPN</span></a>
       <div class="links">
         <a href="/instrukcii/">Инструкции</a>
+        <a href="{CABINET}" target="_blank" rel="noopener">Личный кабинет</a>
         <a href="{BOT}" target="_blank" rel="noopener">Бот @gatexvpn_bot</a>
         <a href="{SUPPORT}" target="_blank" rel="noopener">Поддержка @gatexvpn_support</a>
         <a href="{CHANNEL}" target="_blank" rel="noopener">Канал</a>
