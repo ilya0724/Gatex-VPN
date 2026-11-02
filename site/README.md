@@ -13,3 +13,7 @@
 `tools/build_pages.py` собирает страницы `instrukcii/`, `vpn-belye-spiski/`, `vpn-krym/`, `happ-nastroika/`, `vpn-ne-rabotaet-na-mobilnom/`, а также `404.html`, `sitemap.xml` и общий стиль `assets/guide.css` (стили берутся из `index.html`). Тексты страниц лежат в самом скрипте. После правки: `python3 tools/build_pages.py`, затем залить изменённые файлы. Папку `tools/` на хостинг не класть.
 
 Длина пробного периода в текстах задаётся константой `TRIAL` в скрипте, цены в таблице на странице про белые списки повторяют `PRICES` из `index.html`.
+
+## Картинка для превью ссылки
+
+`og.png` рендерится из `tools/og.html`: `node tools/render_og.js` (нужен Playwright). Срок пробного периода на картинке правится в `og.html` вместе с `TRIAL`.
