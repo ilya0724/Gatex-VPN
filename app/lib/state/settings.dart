@@ -1,4 +1,8 @@
+import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../routing/routing_settings.dart';
 
 /// A DNS choice from the settings screen.
 class DnsPreset {
@@ -46,9 +50,28 @@ class Settings {
   bool get closeToTray => _flag('set.closeToTray', true);
   set closeToTray(bool v) => _prefs.setBool('set.closeToTray', v);
 
-  /// Russian sites go around the tunnel.
-  bool get directRu => _flag('set.directRu', true);
-  set directRu(bool v) => _prefs.setBool('set.directRu', v);
+  /// Routing: app mode, own rules, ads block, Russian sites direct. The old
+  /// `set.directRu` seeds the first read.
+  RoutingSettings get routing {
+    final raw = _prefs.getString('set.routing');
+    if (raw != null) {
+      try {
+        return RoutingSettings.fromJson(
+          jsonDecode(raw) as Map<String, dynamic>,
+        );
+      } catch (_) {}
+    }
+    return RoutingSettings.defaults.copyWith(
+      directRu: _flag('set.directRu', true),
+    );
+  }
+
+  set routing(RoutingSettings v) =>
+      _prefs.setString('set.routing', jsonEncode(v.toJson()));
+
+  /// Russian sites go around the tunnel. Proxy onto [routing].
+  bool get directRu => routing.directRu;
+  set directRu(bool v) => routing = routing.copyWith(directRu: v);
 
   bool get ipv6 => _flag('set.ipv6', true);
   set ipv6(bool v) => _prefs.setBool('set.ipv6', v);
