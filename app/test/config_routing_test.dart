@@ -219,4 +219,29 @@ void main() {
     expect(jsonEncode(rules), isNot(contains('process')));
     expect(rules.last, {'network': 'tcp,udp', 'outboundTag': 'proxy'});
   });
+
+  test('domainStrategy follows enabled own IP rules', () {
+    String strategy(List<RoutingRule> rules) =>
+        jsonDecode(
+              buildConnectConfig(
+                servers: parseServers(_link),
+                host: TunHost.windows,
+                options: ConnectOptions(routing: RoutingSettings(rules: rules)),
+              ),
+            )['routing']['domainStrategy']
+            as String;
+    const ip = RoutingRule(
+      kind: RuleKind.ip,
+      value: '8.8.8.0/24',
+      action: RuleAction.direct,
+    );
+    const dom = RoutingRule(
+      kind: RuleKind.domain,
+      value: 'a.com',
+      action: RuleAction.direct,
+    );
+    expect(strategy(const [dom]), 'AsIs');
+    expect(strategy(const [dom, ip]), 'IPIfNonMatch');
+    expect(strategy([ip.copyWith(enabled: false)]), 'AsIs');
+  });
 }

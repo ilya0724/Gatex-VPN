@@ -113,7 +113,11 @@ String buildConnectConfig({
       'system': {'statsInboundUplink': true, 'statsInboundDownlink': true},
     },
     'routing': {
-      'domainStrategy': 'AsIs',
+      // An own IP rule must also match traffic addressed by domain name.
+      'domainStrategy':
+          options.routing.rules.any((r) => r.enabled && r.kind == RuleKind.ip)
+          ? 'IPIfNonMatch'
+          : 'AsIs',
       'rules': rules,
       if (auto)
         'balancers': [
