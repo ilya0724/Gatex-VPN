@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gatex/core/config_builder.dart';
+import 'package:gatex/routing/routing_settings.dart';
 import 'package:gatex/subscription/share_link.dart';
 import 'package:gatex/subscription/subscription.dart';
 
@@ -137,7 +138,9 @@ void main() {
       buildConnectConfig(
         servers: [servers.first, parseServers(realityLink).single],
         host: TunHost.android,
-        options: const ConnectOptions(directRu: false),
+        options: const ConnectOptions(
+          routing: RoutingSettings(directRu: false),
+        ),
       ),
     );
     final tags = [for (final o in cfg['outbounds']) o['tag']];
@@ -147,14 +150,8 @@ void main() {
       's0-fragment',
     );
     final rules = cfg['routing']['rules'] as List;
-    expect(rules[1]['domain'], ['domain:gatexx.ru']);
-    expect(
-      rules,
-      hasLength(3),
-      reason: 'geosite and inboundTag rules are dropped',
-    );
+    expect(rules, hasLength(2), reason: 'panel routing rules are not applied');
     expect(rules.last['balancerTag'], 'auto');
-    expect(cfg['routing']['domainStrategy'], 'IPIfNonMatch');
   });
 
   test('alpn is fixed up per transport', () {
@@ -216,12 +213,65 @@ void main() {
           host: h,
           options: const ConnectOptions(
             ipv6: false,
-            directRu: false,
+            routing: RoutingSettings(directRu: false),
             dns: ['9.9.9.9'],
             logFile: 'core.log',
             serverIps: ['1.2.3.4', '2001:db8::1'],
           ),
         ),
+      for (final h in TunHost.values)
+        'routing-except-${h.name}': buildConnectConfig(
+          servers: servers,
+          host: h,
+          options: const ConnectOptions(
+            routing: RoutingSettings(
+              appsMode: AppsMode.except,
+              apps: ['steam.exe'],
+            ),
+            processRules: true,
+            serverIps: ['1.2.3.4'],
+          ),
+        ),
+      'routing-only': buildConnectConfig(
+        servers: [servers.first],
+        host: TunHost.windows,
+        options: const ConnectOptions(
+          routing: RoutingSettings(
+            appsMode: AppsMode.only,
+            apps: ['chrome.exe'],
+            blockAds: true,
+            rules: [
+              RoutingRule(
+                kind: RuleKind.domain,
+                value: 'a.com',
+                action: RuleAction.direct,
+              ),
+            ],
+          ),
+          adDomains: ['doubleclick.net'],
+          processRules: true,
+        ),
+      ),
+      'routing-block': buildConnectConfig(
+        servers: servers,
+        host: TunHost.linux,
+        options: const ConnectOptions(
+          routing: RoutingSettings(
+            rules: [
+              RoutingRule(
+                kind: RuleKind.keyword,
+                value: 'ads',
+                action: RuleAction.block,
+              ),
+              RoutingRule(
+                kind: RuleKind.ip,
+                value: '8.8.8.0/24',
+                action: RuleAction.proxy,
+              ),
+            ],
+          ),
+        ),
+      ),
       for (var i = 0; i < servers.length; i++)
         'probe-$i': buildProbeConfig(servers[i]),
       'probe-log': buildProbeConfig(servers.first, logFile: 'probe.log'),

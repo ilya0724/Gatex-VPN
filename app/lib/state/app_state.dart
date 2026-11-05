@@ -381,7 +381,8 @@ class AppState extends ChangeNotifier {
       host: core.tunHost,
       options: ConnectOptions(
         ipv6: ipv6,
-        directRu: settings.directRu,
+        routing: settings.routing,
+        processRules: !Platform.isAndroid,
         dns: settings.dns.servers,
         logFile: coreLogPath,
         serverIps: serverIps,

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../routing/routing_settings.dart';
 import '../subscription/server.dart';
 import '../subscription/subscription.dart' show dialTargets;
 
@@ -26,7 +27,9 @@ const _privateCidrs = [
 class ConnectOptions {
   const ConnectOptions({
     this.ipv6 = true,
-    this.directRu = true,
+    this.routing = RoutingSettings.defaults,
+    this.adDomains = const [],
+    this.processRules = false,
     this.dns = const ['1.1.1.1', '8.8.8.8'],
     this.logFile,
     this.logLevel = 'warning',
@@ -35,9 +38,16 @@ class ConnectOptions {
 
   final bool ipv6;
 
-  /// Russian sites go around the tunnel: banks and Госуслуги often refuse
-  /// foreign IPs, and they are not blocked anyway.
-  final bool directRu;
+  /// The user's routing: apps, own rules, ad blocking, Russian sites direct
+  /// (banks and Госуслуги often refuse foreign IPs).
+  final RoutingSettings routing;
+
+  /// Ad domains to block when [RoutingSettings.blockAds] is on.
+  final List<String> adDomains;
+
+  /// Desktop only: Xray matches programs by process name. Android picks
+  /// apps in VpnService instead, so its config has no process rules.
+  final bool processRules;
   final List<String> dns;
 
   /// Where Xray writes its error log, shown in the app's journal.
@@ -90,14 +100,7 @@ String buildConnectConfig({
   ]);
 
   final target = auto ? {'balancerTag': 'auto'} : {'outboundTag': 'proxy'};
-  final rules = <Map<String, dynamic>>[
-    {'ip': _privateCidrs, 'outboundTag': 'direct'},
-    if (options.serverIps.isNotEmpty)
-      {'ip': options.serverIps, 'outboundTag': 'direct'},
-    if (options.directRu) {'domain': russianDomains, 'outboundTag': 'direct'},
-    ..._panelRules(servers.first.routing, target),
-    {'network': 'tcp,udp', ...target},
-  ];
+  final rules = _rules(options, target);
 
   final config = <String, dynamic>{
     'log': {'loglevel': options.logLevel, 'error': ?options.logFile},
@@ -110,8 +113,7 @@ String buildConnectConfig({
       'system': {'statsInboundUplink': true, 'statsInboundDownlink': true},
     },
     'routing': {
-      'domainStrategy':
-          (servers.first.routing?['domainStrategy'] as String?) ?? 'AsIs',
+      'domainStrategy': 'AsIs',
       'rules': rules,
       if (auto)
         'balancers': [
@@ -226,31 +228,63 @@ List<Map<String, dynamic>> _serverOutbounds(
   ];
 }
 
-/// Keeps the panel's rules that point at proxy, direct or block, so the
-/// panel decides what goes direct. Rules need geo files we do not ship
-/// yet, and rules bound to the panel's own inbounds, are left out.
-List<Map<String, dynamic>> _panelRules(
-  Map<String, dynamic>? routing,
-  Map<String, String> proxyTarget,
+/// Rule order: private ranges and server IPs direct, then the app mode,
+/// own rules, ads, Russian sites, and the catch-all. In `only` mode on
+/// desktop everything is tied to the chosen processes and the rest goes direct.
+List<Map<String, dynamic>> _rules(
+  ConnectOptions options,
+  Map<String, String> target,
 ) {
-  final rules = routing?['rules'];
-  if (rules is! List) return const [];
-  final out = <Map<String, dynamic>>[];
-  for (final r in rules) {
-    if (r is! Map<String, dynamic>) continue;
-    if (r.containsKey('inboundTag') || r.containsKey('balancerTag')) continue;
-    if (jsonEncode(r).contains(RegExp(r'geo(ip|site):|ext:'))) continue;
-    final tag = r['outboundTag'];
-    final rule = Map<String, dynamic>.of(r)..remove('ruleTag');
-    if (tag == 'proxy') {
-      rule.remove('outboundTag');
-      rule.addAll(proxyTarget);
-    } else if (tag != 'direct' && tag != 'block') {
-      continue;
-    }
-    out.add(rule);
-  }
-  return out;
+  final r = options.routing;
+  final byProcess = options.processRules && r.apps.isNotEmpty;
+  final only = byProcess && r.appsMode == AppsMode.only;
+  // In `only` mode a rule matches just the chosen programs.
+  Map<String, dynamic> rule(Map<String, dynamic> m) => {
+    ...m,
+    if (only) 'process': r.apps,
+  };
+
+  const tags = {
+    RuleAction.proxy: null,
+    RuleAction.direct: 'direct',
+    RuleAction.block: 'block',
+  };
+  return [
+    {'ip': _privateCidrs, 'outboundTag': 'direct'},
+    if (options.serverIps.isNotEmpty)
+      {'ip': options.serverIps, 'outboundTag': 'direct'},
+    if (byProcess && r.appsMode == AppsMode.except)
+      {'process': r.apps, 'outboundTag': 'direct'},
+    for (final own in r.rules)
+      if (own.enabled)
+        rule({
+          ...switch (own.kind) {
+            RuleKind.domain => {
+              'domain': ['domain:${own.value}'],
+            },
+            RuleKind.keyword => {
+              'domain': ['keyword:${own.value}'],
+            },
+            RuleKind.ip => {
+              'ip': [own.value],
+            },
+          },
+          ...(tags[own.action] == null
+              ? target
+              : {'outboundTag': tags[own.action]}),
+        }),
+    if (r.blockAds && options.adDomains.isNotEmpty)
+      rule({
+        'domain': [for (final d in options.adDomains) 'domain:$d'],
+        'outboundTag': 'block',
+      }),
+    if (r.directRu) rule({'domain': russianDomains, 'outboundTag': 'direct'}),
+    if (only) {'process': r.apps, ...target},
+    {
+      'network': 'tcp,udp',
+      ...(only ? {'outboundTag': 'direct'} : target),
+    },
+  ];
 }
 
 Map<String, dynamic> _dns(Map<String, dynamic>? panel, List<String> servers) {
