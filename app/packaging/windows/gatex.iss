@@ -49,6 +49,8 @@ Root: HKCR; Subkey: "gatex\shell\open\command"; ValueType: string; ValueName: ""
 
 [Run]
 Filename: "{app}\gatex.exe"; Description: "{cm:LaunchProgram,GateX VPN}"; Flags: nowait postinstall skipifsilent shellexec
+; In-app update installs silently; bring the app back afterwards.
+Filename: "{app}\gatex.exe"; Flags: nowait runasoriginaluser; Check: WizardSilent
 
 [UninstallRun]
 Filename: "schtasks"; Parameters: "/Delete /TN ""GateX VPN"" /F"; Flags: runhidden; RunOnceId: "DropAutostart"

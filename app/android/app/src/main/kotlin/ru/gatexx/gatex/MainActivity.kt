@@ -6,15 +6,18 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.net.VpnService
 import android.os.Build
 import android.util.Log
+import androidx.core.content.FileProvider
 import gatexcore.Gatexcore
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import java.io.ByteArrayOutputStream
+import java.io.File
 import kotlin.concurrent.thread
 
 class MainActivity : FlutterActivity() {
@@ -126,10 +129,46 @@ class MainActivity : FlutterActivity() {
                             android.provider.Settings.Secure.ANDROID_ID,
                         ),
                     )
+                    "abi" -> result.success(Build.SUPPORTED_ABIS.firstOrNull())
+                    "installApk" -> try {
+                        result.success(installApk(call.argument<String>("path")!!))
+                    } catch (e: Exception) {
+                        result.error("install", e.message ?: e.toString(), null)
+                    }
                     else -> result.notImplemented()
                 }
             }
         }
+    }
+
+    /**
+     * Opens the package installer for the downloaded apk. Returns "started",
+     * or "permission" after opening the "install unknown apps" screen for
+     * GateX, when the user has not allowed it yet.
+     */
+    private fun installApk(path: String): String {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+            startActivity(
+                Intent(
+                    android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:$packageName"),
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+            return "permission"
+        }
+        // The provider only serves files/updates; copy in a file from elsewhere.
+        val dir = File(filesDir, "updates").also { it.mkdirs() }
+        var file = File(path)
+        if (file.canonicalFile.parentFile != dir.canonicalFile) {
+            file = file.copyTo(File(dir, file.name), overwrite = true)
+        }
+        val uri = FileProvider.getUriForFile(this, "$packageName.updates", file)
+        startActivity(
+            Intent(Intent.ACTION_VIEW)
+                .setDataAndType(uri, "application/vnd.android.package-archive")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+        return "started"
     }
 
     /** Launchable apps except GateX, sorted by label, icons as 96 px PNG. */

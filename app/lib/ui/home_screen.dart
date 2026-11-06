@@ -733,19 +733,88 @@ class _UpdateBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final u = state.update!;
+    final phase = state.updatePhase;
+    final (
+      IconData icon,
+      String text,
+      String? action,
+      VoidCallback? onTap,
+    ) = switch (phase) {
+      UpdatePhase.downloading => (
+        Icons.downloading_rounded,
+        'Загрузка… ${(state.updateProgress * 100).round()}%',
+        null,
+        null,
+      ),
+      UpdatePhase.ready => (
+        Icons.download_done_rounded,
+        'Версия ${u.version} загружена',
+        'Установить',
+        state.applyUpdate,
+      ),
+      UpdatePhase.installing => (
+        Icons.system_update_rounded,
+        'Устанавливаем…',
+        null,
+        null,
+      ),
+      UpdatePhase.failed => (
+        Icons.error_outline_rounded,
+        state.updateError ?? 'Не удалось обновить',
+        'Повторить',
+        state.retryUpdate,
+      ),
+      _ => (
+        Icons.system_update_rounded,
+        'Доступна версия ${u.version}',
+        'Обновить сейчас',
+        state.startUpdate,
+      ),
+    };
     return GlassCard(
       highlight: true,
-      onTap: () => openLink(u.url),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.system_update_rounded, color: GX.accent),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Доступна версия ${u.version}. Нажмите, чтобы скачать',
-              style: body(14, weight: 600),
-            ),
+          Row(
+            children: [
+              Icon(
+                icon,
+                color: phase == UpdatePhase.failed ? GX.danger : GX.accent,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  text,
+                  style: body(14, weight: 600),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (action != null) ...[
+                const SizedBox(width: 8),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    minimumSize: const Size(0, 34),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: onTap,
+                  child: Text(action, style: body(13, weight: 700)),
+                ),
+              ],
+            ],
           ),
+          if (phase == UpdatePhase.downloading) ...[
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: LinearProgressIndicator(
+                value: state.updateProgress,
+                minHeight: 3,
+              ),
+            ),
+          ],
         ],
       ),
     );

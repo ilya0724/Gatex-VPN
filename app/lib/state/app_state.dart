@@ -67,6 +67,14 @@ class AppState extends ChangeNotifier {
   DateTime? _delaysAt;
 
   AppUpdate? update;
+  UpdatePhase updatePhase = UpdatePhase.none;
+
+  /// 0..1 while the update downloads.
+  double updateProgress = 0;
+
+  /// Why the update failed, shown in the banner.
+  String? updateError;
+  File? _updateFile;
   bool ready = false;
 
   bool get hasSubscription => subscription != null;
@@ -165,6 +173,7 @@ class AppState extends ChangeNotifier {
       unawaited(connect());
     }
     unawaited(_checkUpdate());
+    Timer.periodic(const Duration(hours: 6), (_) => unawaited(_checkUpdate()));
   }
 
   void log(String text, {bool error = false}) {
@@ -887,15 +896,87 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _checkUpdate() async {
-    update = await checkForUpdate(appVersion);
-    if (update != null) notifyListeners();
+    // A download or install in progress keeps its own build.
+    if (updatePhase != UpdatePhase.none &&
+        updatePhase != UpdatePhase.available) {
+      return;
+    }
+    final found = await checkForUpdate(appVersion);
+    if (found == null) return;
+    update = found;
+    updatePhase = UpdatePhase.available;
+    notifyListeners();
   }
+
+  /// «Обновить сейчас»: downloads the build into the app folder.
+  Future<void> startUpdate() async {
+    final u = update;
+    if (u == null || updatePhase == UpdatePhase.downloading) return;
+    updatePhase = UpdatePhase.downloading;
+    updateProgress = 0;
+    updateError = null;
+    notifyListeners();
+    try {
+      await for (final p in downloadUpdate(u, _dataDir)) {
+        updateProgress = p;
+        notifyListeners();
+      }
+      _updateFile = File(
+        '$_dataDir${Platform.pathSeparator}updates'
+        '${Platform.pathSeparator}${u.fileName}',
+      );
+      updatePhase = UpdatePhase.ready;
+    } on UpdateException catch (e) {
+      updateError = e.message;
+      updatePhase = UpdatePhase.failed;
+      log('Обновление: ${e.message}', error: true);
+    }
+    notifyListeners();
+  }
+
+  /// «Установить» (or «Повторить» after a failed install).
+  Future<void> applyUpdate() async {
+    final f = _updateFile;
+    if (f == null || updatePhase == UpdatePhase.installing) return;
+    updatePhase = UpdatePhase.installing;
+    updateError = null;
+    notifyListeners();
+    try {
+      await installUpdate(
+        f.path,
+        quit: () async {
+          if (connected || busy) await core.stop();
+          await DesktopShell.instance.quit();
+        },
+      );
+      // Android: the system installer is on screen; if the user backs out
+      // the file is still there. Linux without a .deb: the page opened.
+      updatePhase = UpdatePhase.ready;
+    } on UpdateException catch (e) {
+      updateError = e.message;
+      updatePhase = UpdatePhase.failed;
+      log('Обновление: ${e.message}', error: true);
+    } on Exception catch (e) {
+      updateError = 'Не удалось установить обновление';
+      updatePhase = UpdatePhase.failed;
+      log('Обновление: $e', error: true);
+    }
+    notifyListeners();
+  }
+
+  /// «Повторить»: the install again if the file is there, else the download.
+  Future<void> retryUpdate() => _updateFile != null && _updateFile!.existsSync()
+      ? applyUpdate()
+      : startUpdate();
 
   void clearError() {
     error = null;
     notifyListeners();
   }
 }
+
+/// Where the in-app update is: the banner on the home screen shows it.
+enum UpdatePhase { none, available, downloading, ready, installing, failed }
 
 class LiveStats {
   const LiveStats({

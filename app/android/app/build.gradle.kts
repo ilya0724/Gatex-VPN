@@ -67,6 +67,8 @@ android {
 dependencies {
     // Xray core built with gomobile from ../../core (see .github/workflows).
     implementation(files("libs/gatexcore.aar"))
+    // FileProvider for the in-app update (also comes with the Flutter embedding).
+    implementation("androidx.core:core:1.13.1")
 }
 
 kotlin {
