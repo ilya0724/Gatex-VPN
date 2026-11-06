@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds app/assets/routing/ads.txt from v2fly/domain-list-community
-# (category-ads-all plus its direct include: lists). Run before flutter build/test.
+# (category-ads-all and its include: lists). Run before flutter build/test.
 set -euo pipefail
 
 base="https://raw.githubusercontent.com/v2fly/domain-list-community/master/data"
@@ -16,7 +16,7 @@ fetch() { curl -fsSL --retry 3 --retry-delay 2 "$base/$1"; }
 # ordinary domains of big vendors (google.com, 126.com) are not blocked.
 seen=" "
 collect() { # name attr depth
-  local name="$1" attr="$2" depth="$3" body inc iattr rest
+  local name="$1" attr="$2" depth="$3" body inc iattr
   case "$seen" in *" $name@$attr "*) return ;; esac
   seen="$seen$name@$attr "
   body="$(fetch "$name")" || { echo "warn: cannot fetch $name" >&2; return 0; }
