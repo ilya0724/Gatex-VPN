@@ -1,4 +1,5 @@
 import '../subscription/server.dart';
+import 'app_state.dart' show autoServerId;
 
 /// Servers «Авто» may use: real, not Russian, not the panel's own «Авто».
 List<Server> autoCandidates(List<Server> all) => [
@@ -33,4 +34,28 @@ Server? pickAuto(
     }
   }
   return best;
+}
+
+/// Runs one job at a time: a call while one is running joins it instead of
+/// starting another. Used so the tunnel is never reconnected twice at once.
+class SingleFlight {
+  Future<void>? _running;
+  bool get running => _running != null;
+
+  Future<void> run(Future<void> Function() job) =>
+      _running ??= job().whenComplete(() => _running = null);
+}
+
+/// What `connect()` should do once the «Авто» pick is back. The user may
+/// have chosen a server or cancelled while the candidates were measured.
+/// Returns null to abort, otherwise the server to connect to.
+Server? settleAutoConnect({
+  required bool cancelled,
+  required String selectedId,
+  required Server? selected,
+  required Server? picked,
+}) {
+  if (cancelled) return null;
+  if (selectedId != autoServerId) return selected;
+  return picked;
 }

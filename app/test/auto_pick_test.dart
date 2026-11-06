@@ -1,4 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
+
+import 'dart:async';
+
+import 'package:gatex/state/app_state.dart' show autoServerId;
 import 'package:gatex/state/auto_pick.dart';
 import 'package:gatex/subscription/server.dart';
 
@@ -60,5 +64,60 @@ void main() {
 
   test('empty gives null', () {
     expect(pickAuto(const [], const {}), isNull);
+  });
+
+  group('settleAutoConnect', () {
+    test('cancelled aborts', () {
+      expect(
+        settleAutoConnect(
+          cancelled: true,
+          selectedId: autoServerId,
+          selected: null,
+          picked: de,
+        ),
+        isNull,
+      );
+    });
+    test('still Авто uses the pick', () {
+      expect(
+        settleAutoConnect(
+          cancelled: false,
+          selectedId: autoServerId,
+          selected: null,
+          picked: de,
+        ),
+        de,
+      );
+    });
+    test('server chosen meanwhile wins over the pick', () {
+      expect(
+        settleAutoConnect(
+          cancelled: false,
+          selectedId: nl.id,
+          selected: nl,
+          picked: de,
+        ),
+        nl,
+      );
+    });
+  });
+
+  test('SingleFlight joins a running job', () async {
+    final f = SingleFlight();
+    final gate = Completer<void>();
+    var runs = 0;
+    final a = f.run(() async {
+      runs++;
+      await gate.future;
+    });
+    final b = f.run(() async => runs++);
+    expect(f.running, isTrue);
+    expect(identical(a, b), isTrue);
+    gate.complete();
+    await a;
+    expect(runs, 1);
+    expect(f.running, isFalse);
+    await f.run(() async => runs++);
+    expect(runs, 2);
   });
 }

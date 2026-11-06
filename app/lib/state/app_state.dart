@@ -267,8 +267,17 @@ class AppState extends ChangeNotifier {
         DateTime.parse(m['fetchedAt'] as String),
       );
       subscription = _raw!.parse();
+      _dropPanelAuto();
     } on Object {
       _prefs.remove('subscription');
+    }
+  }
+
+  /// The panel's own «Авто» entry is never used: the app's Авто replaces it.
+  void _dropPanelAuto() {
+    if (selectedServer?.isPanelAuto ?? false) {
+      selectedId = autoServerId;
+      unawaited(_prefs.setString('selected', autoServerId));
     }
   }
 
@@ -328,7 +337,10 @@ class AppState extends ChangeNotifier {
     subscription = raw.parse();
     _save(raw);
     delays.removeWhere((id, _) => !servers.any((s) => s.id == id));
-    if (selectedId != autoServerId && selectedServer == null) {
+    final wasPanelAuto = selectedServer?.isPanelAuto ?? false;
+    if (wasPanelAuto) {
+      select(autoServerId);
+    } else if (selectedId != autoServerId && selectedServer == null) {
       select(autoServerId);
     }
     error = null;
@@ -350,7 +362,18 @@ class AppState extends ChangeNotifier {
     if (connected) await _reconnect();
   }
 
+  /// Bumped to drop a connect that is still measuring «Авто» candidates.
+  int _connectGen = 0;
+  bool _measuringAuto = false;
+
   Future<void> toggle() async {
+    if (_measuringAuto) {
+      // Disconnect tap while «Авто» is being measured: cancel the connect.
+      _connectGen++;
+      vpnState = VpnState.disconnected;
+      notifyListeners();
+      return;
+    }
     if (busy) return;
     if (connected) {
       await core.stop();
@@ -397,16 +420,28 @@ class AppState extends ChangeNotifier {
       // Show progress: measuring the candidates takes a few seconds.
       vpnState = VpnState.connecting;
       notifyListeners();
-      chosen = await _pickAuto();
+      final gen = ++_connectGen;
+      final picked = await _pickAuto();
+      // The user may have cancelled or chosen a server while we measured.
+      chosen = settleAutoConnect(
+        cancelled: gen != _connectGen,
+        selectedId: selectedId,
+        selected: selectedServer,
+        picked: picked,
+      );
+      if (gen != _connectGen) return;
       if (chosen == null) {
         vpnState = VpnState.disconnected;
-        error = 'Нет серверов для Авто, выберите сервер вручную';
+        if (picked == null && selectedId == autoServerId) {
+          error = 'Нет серверов для Авто, выберите сервер вручную';
+        }
         notifyListeners();
         return;
       }
-      autoCurrentId = chosen.id;
+      autoCurrentId = selectedId == autoServerId ? chosen.id : null;
     }
     final target = chosen;
+    final viaAuto = selectedId == autoServerId;
     final logFile = File(coreLogPath);
     // A fresh log per connection keeps the journal about this session.
     if (logFile.existsSync()) logFile.deleteSync();
@@ -428,7 +463,7 @@ class AppState extends ChangeNotifier {
     vpnState = VpnState.connecting;
     notifyListeners();
     log(
-      selectedServer == null
+      viaAuto
           ? 'Подключение: Авто → ${target.name}'
           : 'Подключение: ${target.name}',
     );
@@ -465,7 +500,12 @@ class AppState extends ChangeNotifier {
   /// Turned off for the session once the system refuses an IPv6 address.
   bool _ipv6 = true;
 
-  Future<void> _reconnect() async {
+  final _reconnectFlight = SingleFlight();
+
+  /// One reconnect at a time; a call while one runs joins it.
+  Future<void> _reconnect() => _reconnectFlight.run(_doReconnect);
+
+  Future<void> _doReconnect() async {
     // Listen before stopping so the disconnect event cannot slip past.
     final down = core.status
         .firstWhere((s) => s.state == VpnState.disconnected)
@@ -534,7 +574,12 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _healthCheck() async {
-    if (_healthBusy || !connected || selectedId != autoServerId) return;
+    if (_healthBusy ||
+        _reconnectFlight.running ||
+        !connected ||
+        selectedId != autoServerId) {
+      return;
+    }
     final id = autoCurrentId;
     Server? current;
     for (final s in servers) {
@@ -571,6 +616,15 @@ class AppState extends ChangeNotifier {
   /// The «Авто» choice: measures the candidates unless a measurement from
   /// the last 5 minutes exists, then picks sticky to the current server.
   Future<Server?> _pickAuto() async {
+    _measuringAuto = true;
+    try {
+      return await _pickAutoInner();
+    } finally {
+      _measuringAuto = false;
+    }
+  }
+
+  Future<Server?> _pickAutoInner() async {
     final candidates = autoCandidates(servers);
     if (candidates.isEmpty) return null;
     // The servers screen may be measuring right now; use its result.
