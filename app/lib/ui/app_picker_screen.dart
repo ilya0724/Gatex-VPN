@@ -64,8 +64,13 @@ class _AppPickerScreenState extends State<AppPickerScreen> {
   }
 
   Future<void> _set(List<String> next) async {
+    // Shown at once; the parent validates and saves without a long wait.
+    final prev = _chosen;
+    setState(() => _chosen = next);
     final error = await widget.onChanged(next);
-    if (error == null && mounted) setState(() => _chosen = next);
+    if (error != null && mounted) {
+      setState(() => _chosen = prev);
+    }
   }
 
   void _toggle(String id, bool on) =>

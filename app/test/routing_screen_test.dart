@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gatex/routing/routing_settings.dart';
@@ -59,5 +61,39 @@ void main() {
     expect(find.text('VPN'), findsOneWidget);
     expect(saved.single.rules.single.value, 'openai.com');
     expect(saved.single.rules.single.action, RuleAction.proxy);
+  });
+
+  testWidgets('two quick edits during a slow save both survive', (t) async {
+    t.view.physicalSize = const Size(900, 3000);
+    t.view.devicePixelRatio = 1;
+    addTearDown(t.view.reset);
+    final saves = <RoutingSettings>[];
+    final gate = Completer<String?>();
+    await t.pumpWidget(
+      MaterialApp(
+        home: RoutingScreen(
+          routing: RoutingSettings.defaults,
+          android: false,
+          onSave: (r) {
+            saves.add(r);
+            return gate.future;
+          },
+        ),
+      ),
+    );
+    await t.tap(find.text('Российские сайты напрямую'));
+    await t.pump();
+    await t.tap(find.text('Блокировать рекламу'));
+    await t.pump();
+    expect(saves, hasLength(2));
+    expect(saves.last.directRu, isFalse);
+    expect(saves.last.blockAds, isTrue);
+    gate.complete(null);
+    await t.pumpAndSettle();
+  });
+
+  testWidgets('import and export live behind one row', (t) async {
+    await pump(t);
+    expect(find.text('Импорт и экспорт правил'), findsOneWidget);
   });
 }

@@ -211,7 +211,8 @@ class AppState extends ChangeNotifier {
     if (error != null) return error;
     settings.routing = r;
     notifyListeners();
-    if (connected) await _reconnect();
+    // The reconnect takes seconds; callers must not wait for it.
+    if (connected) unawaited(_reconnect());
     return null;
   }
 

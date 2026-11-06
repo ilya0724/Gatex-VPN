@@ -41,16 +41,19 @@ class _RoutingScreenState extends State<RoutingScreen> {
     context,
   ).showSnackBar(SnackBar(content: Text(text)));
 
-  /// Applies [next] once it is accepted; otherwise shows why and keeps [_r].
+  /// Shows [next] right away when it is valid and hands it to [onSave]
+  /// without waiting: a reconnect may take seconds, and a quick second edit
+  /// must build on this one. Returns the refusal message, or null.
   Future<String?> _save(RoutingSettings next) async {
-    final error = await widget.onSave(next);
-    if (!mounted) return error;
+    final error = next.validate();
     if (error != null) {
       _snack(error);
-    } else {
-      setState(() => _r = next);
+      return error;
     }
-    return error;
+    setState(() => _r = next);
+    final late = await widget.onSave(next);
+    if (late != null && mounted) _snack(late);
+    return late;
   }
 
   Future<void> _addRule() async {
@@ -75,6 +78,38 @@ class _RoutingScreenState extends State<RoutingScreen> {
     final r = rules.removeAt(i);
     rules.insert(j, r);
     _save(_r.copyWith(rules: rules));
+  }
+
+  Future<void> _shareSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: GX.bg2,
+      showDragHandle: true,
+      builder: (c) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _NavRow(
+              icon: Icons.upload_rounded,
+              title: 'Экспорт в буфер обмена',
+              onTap: () {
+                Navigator.pop(c);
+                _export();
+              },
+            ),
+            _NavRow(
+              icon: Icons.download_rounded,
+              title: 'Импорт из буфера обмена',
+              onTap: () {
+                Navigator.pop(c);
+                _import();
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _export() async {
@@ -192,17 +227,12 @@ class _RoutingScreenState extends State<RoutingScreen> {
                 ],
               ),
               _Section(
-                title: 'Импорт и экспорт',
+                title: 'Обмен',
                 children: [
                   _NavRow(
-                    icon: Icons.upload_rounded,
-                    title: 'Экспорт в буфер обмена',
-                    onTap: _export,
-                  ),
-                  _NavRow(
-                    icon: Icons.download_rounded,
-                    title: 'Импорт из буфера обмена',
-                    onTap: _import,
+                    icon: Icons.ios_share_rounded,
+                    title: 'Импорт и экспорт правил',
+                    onTap: _shareSheet,
                   ),
                 ],
               ),
