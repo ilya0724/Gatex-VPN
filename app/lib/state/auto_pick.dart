@@ -1,5 +1,7 @@
 import '../subscription/server.dart';
-import 'app_state.dart' show autoServerId;
+
+/// Id of the app's own «Авто» entry in the server list.
+const autoServerId = 'auto';
 
 /// Servers «Авто» may use: real, not Russian, not the panel's own «Авто».
 List<Server> autoCandidates(List<Server> all) => [
@@ -36,14 +38,36 @@ Server? pickAuto(
   return best;
 }
 
-/// Runs one job at a time: a call while one is running joins it instead of
-/// starting another. Used so the tunnel is never reconnected twice at once.
+/// Runs one job at a time. A call while one runs does not start another
+/// but asks for exactly one more run after it (any number of calls coalesce),
+/// so the last request always sees fresh state. All callers get the same
+/// Future, which completes after the final run.
 class SingleFlight {
   Future<void>? _running;
+  Future<void> Function()? _job;
+  bool _again = false;
   bool get running => _running != null;
 
-  Future<void> run(Future<void> Function() job) =>
-      _running ??= job().whenComplete(() => _running = null);
+  Future<void> run(Future<void> Function() job) {
+    _job = job;
+    final r = _running;
+    if (r != null) {
+      _again = true;
+      return r;
+    }
+    return _running = _drain();
+  }
+
+  Future<void> _drain() async {
+    try {
+      do {
+        _again = false;
+        await _job!();
+      } while (_again);
+    } finally {
+      _running = null;
+    }
+  }
 }
 
 /// What `connect()` should do once the «Авто» pick is back. The user may

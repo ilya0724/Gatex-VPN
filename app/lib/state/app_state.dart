@@ -25,7 +25,7 @@ import 'settings.dart';
 import 'updates.dart';
 
 /// The app picks the fastest non-Russian server and sticks to it.
-const autoServerId = 'auto';
+export 'auto_pick.dart' show autoServerId;
 
 class AppState extends ChangeNotifier {
   AppState({VpnCore? core}) : core = core ?? VpnCore.create();
@@ -364,10 +364,10 @@ class AppState extends ChangeNotifier {
 
   /// Bumped to drop a connect that is still measuring «Авто» candidates.
   int _connectGen = 0;
-  bool _measuringAuto = false;
+  int? _measuringGen;
 
   Future<void> toggle() async {
-    if (_measuringAuto) {
+    if (_measuringGen == _connectGen && vpnState == VpnState.connecting) {
       // Disconnect tap while «Авто» is being measured: cancel the connect.
       _connectGen++;
       vpnState = VpnState.disconnected;
@@ -421,7 +421,8 @@ class AppState extends ChangeNotifier {
       vpnState = VpnState.connecting;
       notifyListeners();
       final gen = ++_connectGen;
-      final picked = await _pickAuto();
+      _measuringGen = gen;
+      final picked = await _pickAuto(gen);
       // The user may have cancelled or chosen a server while we measured.
       chosen = settleAutoConnect(
         cancelled: gen != _connectGen,
@@ -615,12 +616,12 @@ class AppState extends ChangeNotifier {
 
   /// The «Авто» choice: measures the candidates unless a measurement from
   /// the last 5 minutes exists, then picks sticky to the current server.
-  Future<Server?> _pickAuto() async {
-    _measuringAuto = true;
+  Future<Server?> _pickAuto(int gen) async {
     try {
       return await _pickAutoInner();
     } finally {
-      _measuringAuto = false;
+      // An older pick finishing must not clear a newer one's flag.
+      if (_measuringGen == gen) _measuringGen = null;
     }
   }
 

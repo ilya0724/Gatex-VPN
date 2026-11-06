@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'dart:async';
 
-import 'package:gatex/state/app_state.dart' show autoServerId;
 import 'package:gatex/state/auto_pick.dart';
 import 'package:gatex/subscription/server.dart';
 
@@ -102,22 +101,30 @@ void main() {
     });
   });
 
-  test('SingleFlight joins a running job', () async {
+  test('SingleFlight coalesces calls into one trailing run', () async {
     final f = SingleFlight();
     final gate = Completer<void>();
     var runs = 0;
-    final a = f.run(() async {
+    Future<void> job() async {
       runs++;
-      await gate.future;
-    });
-    final b = f.run(() async => runs++);
+      if (runs == 1) await gate.future;
+    }
+
+    final a = f.run(job);
+    final b = f.run(job);
+    final c = f.run(job);
     expect(f.running, isTrue);
-    expect(identical(a, b), isTrue);
+    var done = 0;
+    for (final x in [a, b, c]) {
+      x.then((_) => done++);
+    }
+    await Future<void>.delayed(Duration.zero);
+    expect(done, 0);
     gate.complete();
-    await a;
-    expect(runs, 1);
-    expect(f.running, isFalse);
-    await f.run(() async => runs++);
+    await Future.wait([a, b, c]);
     expect(runs, 2);
+    expect(f.running, isFalse);
+    await f.run(job);
+    expect(runs, 3);
   });
 }
