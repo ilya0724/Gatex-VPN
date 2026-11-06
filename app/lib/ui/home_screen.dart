@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../core/vpn_core.dart';
 import '../links.dart';
 import '../state/app_state.dart';
+import '../state/auto_pick.dart';
+import '../subscription/server.dart';
 import '../subscription/subscription.dart';
 import 'flags.dart';
 import 'intro.dart';
@@ -509,6 +511,12 @@ class _ServerTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = state.selectedServer;
+    Server? now;
+    if (s == null && state.connected) {
+      for (final c in state.servers) {
+        if (c.id == state.autoCurrentId) now = c;
+      }
+    }
     return GlassCard(
       onTap: () => Navigator.of(context)
           .push(MaterialPageRoute(builder: (_) => ServersScreen(state: state))),
@@ -526,13 +534,15 @@ class _ServerTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  s?.title ?? 'Авто',
+                  s?.title ?? (now == null ? 'Авто' : 'Авто → ${now.title}'),
                   style: body(16, weight: 700),
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   s == null
-                      ? 'Самый быстрый из ${_servers(state.servers.length)}'
+                      ? 'Самый быстрый из ${_servers(autoCandidates(state.servers).length)}'
+                      : s.isRussian
+                      ? 'не входит в Авто'
                       : s.description ?? s.transport,
                   style: body(12.5, color: GX.muted),
                   overflow: TextOverflow.ellipsis,

@@ -108,7 +108,11 @@ class _ServerListState extends State<ServerList> {
   }
 
   List<(String, List<Server>)> _groups(AppState state) {
-    final servers = state.servers;
+    // The panel's own «Авто» is replaced by the app's.
+    final servers = [
+      for (final s in state.servers)
+        if (!s.isPanelAuto) s,
+    ];
     if (_byPing) {
       final sorted = [...servers]
         ..sort((a, b) {
@@ -136,7 +140,7 @@ class _ServerListState extends State<ServerList> {
   Widget _tile(AppState state, Server s) {
     final tested = state.delays.containsKey(s.id);
     final failure = state.delayErrors[s.id];
-    return _ServerCard(
+    final card = _ServerCard(
       selected: state.selectedId == s.id,
       leading: FlagBadge(code: s.countryCode),
       title: s.title,
@@ -155,6 +159,8 @@ class _ServerListState extends State<ServerList> {
               ),
             ),
           Text(s.transport, style: body(12, color: GX.muted)),
+          if (s.isRussian)
+            Text('не входит в Авто', style: body(12, color: GX.muted)),
           if (s.isLte) TagChip('LTE', color: GX.warn),
           if (failure != null)
             Text(
@@ -184,6 +190,8 @@ class _ServerListState extends State<ServerList> {
       ),
       onTap: () => _pick(s.id),
     );
+    // Russian servers stay selectable by hand but are never used by Авто.
+    return s.isRussian ? Opacity(opacity: 0.45, child: card) : card;
   }
 
   void _pick(String id) {

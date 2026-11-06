@@ -14,11 +14,11 @@ List<Map<String, dynamic>> _rules(
   List<String> adDomains = const [],
   bool processRules = false,
   List<String> serverIps = const [],
-  List<Server>? servers,
+  Server? server,
 }) {
   final cfg = jsonDecode(
     buildConnectConfig(
-      servers: servers ?? parseServers(_link),
+      server: server ?? parseServers(_link).first,
       host: TunHost.windows,
       options: ConnectOptions(
         routing: routing,
@@ -60,7 +60,7 @@ void main() {
         ],
       },
     })!;
-    final rules = _rules(RoutingSettings.defaults, servers: [server]);
+    final rules = _rules(RoutingSettings.defaults, server: server);
     expect(rules.any((r) => _eq(r['domain'], russianDomains)), isTrue);
     expect(rules.any((r) => r.containsKey('process')), isFalse);
     expect(jsonEncode(rules), isNot(contains('panel.example')));
@@ -112,27 +112,6 @@ void main() {
       },
       {'network': 'tcp,udp', 'outboundTag': 'proxy'},
     ]);
-  });
-
-  test('own proxy rule targets the balancer with several servers', () {
-    final servers = parseServers(
-      '$_link\n${_link.replaceFirst('1.2.3.4', '5.6.7.8')}',
-    );
-    final rules = _rules(
-      const RoutingSettings(
-        directRu: false,
-        rules: [
-          RoutingRule(
-            kind: RuleKind.domain,
-            value: 'a.com',
-            action: RuleAction.proxy,
-          ),
-        ],
-      ),
-      servers: servers,
-    );
-    expect(rules[1]['balancerTag'], 'auto');
-    expect(rules.last['balancerTag'], 'auto');
   });
 
   test('ads block sits after own rules and before RU direct', () {
@@ -224,7 +203,7 @@ void main() {
     String strategy(List<RoutingRule> rules) =>
         jsonDecode(
               buildConnectConfig(
-                servers: parseServers(_link),
+                server: parseServers(_link).first,
                 host: TunHost.windows,
                 options: ConnectOptions(routing: RoutingSettings(rules: rules)),
               ),

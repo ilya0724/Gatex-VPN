@@ -81,6 +81,13 @@ class Server {
     return '';
   }
 
+  /// Russian exits are never picked by «Авто»: the point of the VPN is a
+  /// way out of Russia, and Russian sites go direct anyway.
+  bool get isRussian => flag == '🇷🇺';
+
+  /// The panel's own «Авто» entry. The app has its own, so it is hidden.
+  bool get isPanelAuto => title.contains('Авто');
+
   /// The name without the leading flag, which the list draws as a badge.
   /// Other emoji stay: they are part of how the panel names the server.
   String get title {

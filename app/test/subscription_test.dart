@@ -136,7 +136,7 @@ void main() {
 
     final cfg = jsonDecode(
       buildConnectConfig(
-        servers: [servers.first, parseServers(realityLink).single],
+        server: servers.first,
         host: TunHost.android,
         options: const ConnectOptions(
           routing: RoutingSettings(directRu: false),
@@ -144,14 +144,16 @@ void main() {
       ),
     );
     final tags = [for (final o in cfg['outbounds']) o['tag']];
-    expect(tags, ['proxy-0', 's0-fragment', 'proxy-1', 'direct', 'block']);
+    expect(tags, ['proxy', 's0-fragment', 'direct', 'block']);
     expect(
       cfg['outbounds'][0]['streamSettings']['sockopt']['dialerProxy'],
       's0-fragment',
     );
     final rules = cfg['routing']['rules'] as List;
     expect(rules, hasLength(2), reason: 'panel routing rules are not applied');
-    expect(rules.last['balancerTag'], 'auto');
+    expect(rules.last['outboundTag'], 'proxy');
+    expect(cfg['routing'].containsKey('balancers'), isFalse);
+    expect(cfg.containsKey('observatory'), isFalse);
   });
 
   test('alpn is fixed up per transport', () {
@@ -206,10 +208,14 @@ void main() {
     final dir = await Directory.systemTemp.createTemp('gatex');
     final cases = {
       for (final h in TunHost.values)
-        'auto-${h.name}': buildConnectConfig(servers: servers, host: h),
+        for (var i = 0; i < servers.length; i++)
+          'server-$i-${h.name}': buildConnectConfig(
+            server: servers[i],
+            host: h,
+          ),
       for (final h in TunHost.values)
         'single-${h.name}': buildConnectConfig(
-          servers: [servers.first],
+          server: servers.first,
           host: h,
           options: const ConnectOptions(
             ipv6: false,
@@ -221,7 +227,7 @@ void main() {
         ),
       for (final h in TunHost.values)
         'routing-except-${h.name}': buildConnectConfig(
-          servers: servers,
+          server: servers.last,
           host: h,
           options: const ConnectOptions(
             routing: RoutingSettings(
@@ -233,7 +239,7 @@ void main() {
           ),
         ),
       'routing-only': buildConnectConfig(
-        servers: [servers.first],
+        server: servers.first,
         host: TunHost.windows,
         options: const ConnectOptions(
           routing: RoutingSettings(
@@ -253,7 +259,7 @@ void main() {
         ),
       ),
       'routing-block': buildConnectConfig(
-        servers: servers,
+        server: servers.last,
         host: TunHost.linux,
         options: const ConnectOptions(
           routing: RoutingSettings(

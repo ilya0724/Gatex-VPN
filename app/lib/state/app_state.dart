@@ -19,11 +19,12 @@ import '../subscription/fetcher.dart';
 import '../subscription/server.dart';
 import '../subscription/subscription.dart';
 import '../ui/theme.dart' show GX;
+import 'auto_pick.dart';
 import 'diagnose.dart';
 import 'settings.dart';
 import 'updates.dart';
 
-/// Picks every live server and lets Xray keep the fastest one.
+/// The app picks the fastest non-Russian server and sticks to it.
 const autoServerId = 'auto';
 
 class AppState extends ChangeNotifier {
@@ -58,6 +59,10 @@ class AppState extends ChangeNotifier {
   /// Why a server failed its delay test, by server id.
   final delayErrors = <String, DelayFailure>{};
   bool testingDelays = false;
+
+  /// The server «Авто» connected to, while connected in «Авто».
+  String? autoCurrentId;
+  DateTime? _delaysAt;
 
   AppUpdate? update;
   bool ready = false;
@@ -386,14 +391,29 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    final chosen = selectedServer;
+    var chosen = selectedServer;
+    if (chosen != null) autoCurrentId = null;
+    if (chosen == null) {
+      // Show progress: measuring the candidates takes a few seconds.
+      vpnState = VpnState.connecting;
+      notifyListeners();
+      chosen = await _pickAuto();
+      if (chosen == null) {
+        vpnState = VpnState.disconnected;
+        error = 'Нет серверов для Авто, выберите сервер вручную';
+        notifyListeners();
+        return;
+      }
+      autoCurrentId = chosen.id;
+    }
+    final target = chosen;
     final logFile = File(coreLogPath);
     // A fresh log per connection keeps the journal about this session.
     if (logFile.existsSync()) logFile.deleteSync();
     final serverIps = await _resolveServers();
     final adDomains = await _adDomains();
     String config({required bool ipv6}) => buildConnectConfig(
-      servers: chosen != null ? [chosen] : servers,
+      server: target,
       host: core.tunHost,
       options: ConnectOptions(
         ipv6: ipv6,
@@ -407,7 +427,11 @@ class AppState extends ChangeNotifier {
     );
     vpnState = VpnState.connecting;
     notifyListeners();
-    log('Подключение: ${chosen?.name ?? 'Авто (${servers.length})'}');
+    log(
+      selectedServer == null
+          ? 'Подключение: Авто → ${target.name}'
+          : 'Подключение: ${target.name}',
+    );
     final ipv6 = settings.ipv6 && _ipv6;
     var failure = await core.start(config(ipv6: ipv6));
     if (failure != null && ipv6 && failure.contains('fdfe:')) {
@@ -487,6 +511,95 @@ class AppState extends ChangeNotifier {
       live.value = null;
       exit.value = null;
     }
+    _syncHealth();
+  }
+
+  /// Checks the «Авто» server every minute while connected in «Авто».
+  Timer? _healthTimer;
+  var _healthFails = 0;
+  var _healthBusy = false;
+
+  void _syncHealth() {
+    final want = connected && selectedId == autoServerId;
+    if (want && _healthTimer == null) {
+      _healthFails = 0;
+      _healthTimer = Timer.periodic(
+        const Duration(seconds: 60),
+        (_) => unawaited(_healthCheck()),
+      );
+    } else if (!want && _healthTimer != null) {
+      _healthTimer?.cancel();
+      _healthTimer = null;
+    }
+  }
+
+  Future<void> _healthCheck() async {
+    if (_healthBusy || !connected || selectedId != autoServerId) return;
+    final id = autoCurrentId;
+    Server? current;
+    for (final s in servers) {
+      if (s.id == id) current = s;
+    }
+    if (current == null) return;
+    _healthBusy = true;
+    try {
+      final dir = _dataDir;
+      final r = await _probe(
+        current,
+        '$dir${Platform.pathSeparator}probe-health.log',
+        3000,
+      );
+      // The user may have disconnected or picked a server meanwhile.
+      if (!connected || selectedId != autoServerId) return;
+      if (r.ms != null) {
+        _healthFails = 0;
+        delays[current.id] = r.ms;
+        return;
+      }
+      if (++_healthFails < 2) return;
+      _healthFails = 0;
+      log('Сервер ${current.name} не отвечает, ищем другой', error: true);
+      await _measureAuto(autoCandidates(servers));
+      if (!connected || selectedId != autoServerId) return;
+      // The failed server now has no delay, so the pick moves off it.
+      await _reconnect();
+    } finally {
+      _healthBusy = false;
+    }
+  }
+
+  /// The «Авто» choice: measures the candidates unless a measurement from
+  /// the last 5 minutes exists, then picks sticky to the current server.
+  Future<Server?> _pickAuto() async {
+    final candidates = autoCandidates(servers);
+    if (candidates.isEmpty) return null;
+    // The servers screen may be measuring right now; use its result.
+    for (var i = 0; testingDelays && i < 75; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    final at = _delaysAt;
+    final fresh =
+        at != null &&
+        DateTime.now().difference(at) < const Duration(minutes: 5) &&
+        candidates.any((s) => delays[s.id] != null);
+    if (!fresh) await _measureAuto(candidates);
+    return pickAuto(candidates, delays, currentId: autoCurrentId);
+  }
+
+  /// Delay of every candidate at once, 3 s each.
+  Future<void> _measureAuto(List<Server> candidates) async {
+    log('Авто: проверка серверов (${candidates.length})');
+    var n = 0;
+    await Future.wait([
+      for (final s in candidates)
+        _probe(
+          s,
+          '$_dataDir${Platform.pathSeparator}probe-auto-${n++}.log',
+          3000,
+        ).then((r) => delays[s.id] = r.ms),
+    ]);
+    _delaysAt = DateTime.now();
+    notifyListeners();
   }
 
   Future<void> _tick() async {
@@ -569,6 +682,7 @@ class AppState extends ChangeNotifier {
 
     await Future.wait(List.generate(min(4, queue.length), (_) => worker()));
     testingDelays = false;
+    _delaysAt = DateTime.now();
     notifyListeners();
   }
 

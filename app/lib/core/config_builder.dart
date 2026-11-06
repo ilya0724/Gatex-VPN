@@ -78,33 +78,24 @@ const russianDomains = [
   'domain:2gis.com',
 ];
 
-/// Builds the full Xray config to connect with. With one server all
-/// traffic goes to it; with several, Xray's balancer keeps the fastest
-/// live one (leastPing over the observatory) and moves off a dead one.
+/// Builds the full Xray config to connect with. All traffic goes to the one
+/// [server]; «Авто» is decided by the app, which hands over its pick.
 String buildConnectConfig({
-  required List<Server> servers,
+  required Server server,
   required TunHost host,
   ConnectOptions options = const ConnectOptions(),
 }) {
-  if (servers.isEmpty) throw ArgumentError('no servers');
-  final auto = servers.length > 1;
-  final outbounds = <Map<String, dynamic>>[];
-  for (var i = 0; i < servers.length; i++) {
-    outbounds.addAll(
-      _serverOutbounds(servers[i], auto ? 'proxy-$i' : 'proxy', 's$i-'),
-    );
-  }
-  outbounds.addAll([
+  final outbounds = <Map<String, dynamic>>[
+    ..._serverOutbounds(server, 'proxy', 's0-'),
     {'tag': 'direct', 'protocol': 'freedom'},
     {'tag': 'block', 'protocol': 'blackhole'},
-  ]);
+  ];
 
-  final target = auto ? {'balancerTag': 'auto'} : {'outboundTag': 'proxy'};
-  final rules = _rules(options, target);
+  final rules = _rules(options, {'outboundTag': 'proxy'});
 
   final config = <String, dynamic>{
     'log': {'loglevel': options.logLevel, 'error': ?options.logFile},
-    'dns': _dns(servers.first.dns, options.dns),
+    'dns': _dns(server.dns, options.dns),
     'inbounds': [_tunInbound(host, ipv6: options.ipv6, dns: options.dns)],
     'outbounds': outbounds,
     // Counters for the TUN inbound only: the speed and traffic on screen.
@@ -119,23 +110,7 @@ String buildConnectConfig({
           ? 'IPIfNonMatch'
           : 'AsIs',
       'rules': rules,
-      if (auto)
-        'balancers': [
-          {
-            'tag': 'auto',
-            'selector': ['proxy-'],
-            'strategy': {'type': 'leastPing'},
-            'fallbackTag': 'proxy-0',
-          },
-        ],
     },
-    if (auto)
-      'observatory': {
-        'subjectSelector': ['proxy-'],
-        'probeUrl': probeUrl,
-        'probeInterval': '1m',
-        'enableConcurrency': true,
-      },
   };
   return const JsonEncoder.withIndent('  ').convert(config);
 }
