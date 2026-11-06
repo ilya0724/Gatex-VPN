@@ -49,6 +49,13 @@ void main() {
       expect(parseTariff('Ваша подписка'), isNull);
       expect(parseTariff(null), isNull);
     });
+    test('empty Тариф line does not take the next line', () {
+      expect(parseTariff('Тариф:\nВаша подписка ✅ Активна'), isNull);
+      expect(parseTariff('Тариф: \t\nДругая строка'), isNull);
+    });
+    test('CRLF announce', () {
+      expect(parseTariff('Тариф: Стандарт\r\nx'), 'Стандарт');
+    });
   });
 
   group('parseEmojiLegend', () {
@@ -63,6 +70,7 @@ void main() {
       expect(parseEmojiLegend('💫 - a\n💫 - b'), [('💫', 'a')]);
       expect(parseEmojiLegend(null), isEmpty);
       expect(parseEmojiLegend('hello'), isEmpty);
+      expect(parseEmojiLegend('💫\n- not a legend'), isEmpty);
     });
     test('Subscription exposes both', () async {
       final s = (await _state(_announce)).subscription!;

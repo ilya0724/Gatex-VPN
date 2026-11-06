@@ -102,6 +102,28 @@ void main() {
     });
   }
 
+  for (final mode in [AppsMode.only, AppsMode.except]) {
+    testWidgets('desktop exit line in ${mode.name} mode', (t) async {
+      final state = await _state(
+        routing: RoutingSettings(appsMode: mode, apps: const ['a.exe']),
+      );
+      state.vpnState = VpnState.connected;
+      state.exit.value = const ExitInfo(
+        ip: '9.9.9.9',
+        countryCode: 'DE',
+        country: 'Германия',
+      );
+      await _pump(t, state, const Size(360, 640));
+      // The address is looked up by gatex.exe, which only-mode leaves
+      // outside the tunnel, so it would show the wrong exit.
+      expect(
+        find.text('9.9.9.9 · Германия'),
+        mode == AppsMode.only ? findsNothing : findsOneWidget,
+      );
+      await t.pumpWidget(const SizedBox());
+    });
+  }
+
   testWidgets('no chip when every app goes through the VPN', (t) async {
     await _pump(t, await _state(), const Size(360, 640));
     expect(find.byIcon(Icons.alt_route_rounded), findsNothing);

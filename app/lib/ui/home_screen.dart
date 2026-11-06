@@ -848,7 +848,7 @@ class _LiveInfo extends StatelessWidget {
             valueListenable: state.exit,
             builder: (context, exit, _) => AnimatedSwitcher(
               duration: const Duration(milliseconds: 300),
-              child: exit == null
+              child: exit == null || !state.exitShown
                   ? const SizedBox(height: 4)
                   : Padding(
                       key: ValueKey(exit.ip),

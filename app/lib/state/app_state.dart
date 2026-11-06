@@ -583,6 +583,11 @@ class AppState extends ChangeNotifier {
 
   /// The address sites see while connected, and its country.
   final exit = ValueNotifier<ExitInfo?>(null);
+
+  /// Desktop «Только выбранные»: the exit is looked up by gatex.exe, which
+  /// stays outside the tunnel, so the address shown would be wrong.
+  bool get exitShown =>
+      Platform.isAndroid || settings.routing.appsMode != AppsMode.only;
   Timer? _liveTimer;
   (int, int)? _lastTraffic;
 

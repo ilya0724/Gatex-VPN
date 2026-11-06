@@ -144,10 +144,117 @@ class _RoutingScreenState extends State<RoutingScreen> {
     );
   }
 
+  /// Desktop windows this wide lay the page out in two columns, as the
+  /// wide settings do: programs and presets | own rules.
+  static const _wideFrom = 860.0;
+
   @override
   Widget build(BuildContext context) {
     final android = widget.android;
     final what = android ? 'Приложения' : 'Программы';
+    final wide = !android && MediaQuery.sizeOf(context).width >= _wideFrom;
+    final mode = Padding(
+      padding: const EdgeInsets.all(12),
+      child: SegmentedPick<AppsMode>(
+        options: const [
+          (AppsMode.all, 'Все'),
+          (AppsMode.only, 'Только выбранные'),
+          (AppsMode.except, 'Кроме выбранных'),
+        ],
+        value: _r.appsMode,
+        onChanged: (m) => _save(_r.copyWith(appsMode: m)),
+      ),
+    );
+    final pick = _NavRow(
+      icon: android ? Icons.apps_rounded : Icons.desktop_windows_rounded,
+      title: android ? 'Выбрать приложения' : 'Выбрать программы',
+      value: _r.apps.isEmpty ? null : '${_r.apps.length}',
+      onTap: _pickApps,
+    );
+    final hint = android
+        ? null
+        : Padding(
+            padding: const EdgeInsets.fromLTRB(6, 8, 6, 0),
+            child: Text(
+              'Программы мимо VPN всегда идут напрямую, правила для сайтов действуют только внутри VPN.',
+              style: body(12.5, color: GX.muted),
+            ),
+          );
+    final presets = _Section(
+      title: 'Готовые наборы',
+      children: [
+        _SwitchRow(
+          icon: Icons.flag_rounded,
+          title: 'Российские сайты напрямую',
+          subtitle: 'Банки, Госуслуги, Яндекс и VK без VPN',
+          value: _r.directRu,
+          onChanged: (v) => _save(_r.copyWith(directRu: v)),
+        ),
+        _SwitchRow(
+          icon: Icons.block_rounded,
+          title: 'Блокировать рекламу',
+          subtitle: 'Трекеры и рекламные сети',
+          value: _r.blockAds,
+          onChanged: (v) => _save(_r.copyWith(blockAds: v)),
+        ),
+      ],
+    );
+    final rules = _Section(
+      title: 'Свои правила',
+      children: [
+        for (var i = 0; i < _r.rules.length; i++)
+          _RuleRow(
+            rule: _r.rules[i],
+            first: i == 0,
+            last: i == _r.rules.length - 1,
+            onToggle: (v) => _replaceRule(i, _r.rules[i].copyWith(enabled: v)),
+            onUp: () => _moveRule(i, -1),
+            onDown: () => _moveRule(i, 1),
+            onDelete: () => _replaceRule(i, null),
+          ),
+        _NavRow(
+          icon: Icons.add_rounded,
+          title: 'Добавить правило',
+          onTap: _addRule,
+        ),
+      ],
+    );
+    // A single row: its own title would only repeat it.
+    final share = _Section(
+      children: [
+        _NavRow(
+          icon: Icons.ios_share_rounded,
+          title: 'Импорт и экспорт правил',
+          onTap: _shareSheet,
+        ),
+      ],
+    );
+    final List<Widget> children = wide
+        ? [
+            _Section(title: what, children: [mode]),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    children: [
+                      _Section(children: [pick]),
+                      presets,
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(child: Column(children: [rules, share, ?hint])),
+              ],
+            ),
+          ]
+        : [
+            _Section(title: what, children: [mode, pick]),
+            ?hint,
+            presets,
+            rules,
+            share,
+          ];
     return Scaffold(
       appBar: AppBar(
         title: const Text('Маршрутизация'),
@@ -155,94 +262,10 @@ class _RoutingScreenState extends State<RoutingScreen> {
       ),
       body: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 560),
+          constraints: BoxConstraints(maxWidth: wide ? 940 : 560),
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-            children: [
-              _Section(
-                title: what,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: SegmentedPick<AppsMode>(
-                      options: const [
-                        (AppsMode.all, 'Все'),
-                        (AppsMode.only, 'Только выбранные'),
-                        (AppsMode.except, 'Кроме выбранных'),
-                      ],
-                      value: _r.appsMode,
-                      onChanged: (m) => _save(_r.copyWith(appsMode: m)),
-                    ),
-                  ),
-                  _NavRow(
-                    icon: android
-                        ? Icons.apps_rounded
-                        : Icons.desktop_windows_rounded,
-                    title: android ? 'Выбрать приложения' : 'Выбрать программы',
-                    value: _r.apps.isEmpty ? null : '${_r.apps.length}',
-                    onTap: _pickApps,
-                  ),
-                ],
-              ),
-              if (!android)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(6, 8, 6, 0),
-                  child: Text(
-                    'Программы мимо VPN всегда идут напрямую, правила для сайтов действуют только внутри VPN.',
-                    style: body(12.5, color: GX.muted),
-                  ),
-                ),
-              _Section(
-                title: 'Готовые наборы',
-                children: [
-                  _SwitchRow(
-                    icon: Icons.flag_rounded,
-                    title: 'Российские сайты напрямую',
-                    subtitle: 'Банки, Госуслуги, Яндекс и VK без VPN',
-                    value: _r.directRu,
-                    onChanged: (v) => _save(_r.copyWith(directRu: v)),
-                  ),
-                  _SwitchRow(
-                    icon: Icons.block_rounded,
-                    title: 'Блокировать рекламу',
-                    subtitle: 'Трекеры и рекламные сети',
-                    value: _r.blockAds,
-                    onChanged: (v) => _save(_r.copyWith(blockAds: v)),
-                  ),
-                ],
-              ),
-              _Section(
-                title: 'Свои правила',
-                children: [
-                  for (var i = 0; i < _r.rules.length; i++)
-                    _RuleRow(
-                      rule: _r.rules[i],
-                      first: i == 0,
-                      last: i == _r.rules.length - 1,
-                      onToggle: (v) =>
-                          _replaceRule(i, _r.rules[i].copyWith(enabled: v)),
-                      onUp: () => _moveRule(i, -1),
-                      onDown: () => _moveRule(i, 1),
-                      onDelete: () => _replaceRule(i, null),
-                    ),
-                  _NavRow(
-                    icon: Icons.add_rounded,
-                    title: 'Добавить правило',
-                    onTap: _addRule,
-                  ),
-                ],
-              ),
-              _Section(
-                title: 'Обмен',
-                children: [
-                  _NavRow(
-                    icon: Icons.ios_share_rounded,
-                    title: 'Импорт и экспорт правил',
-                    onTap: _shareSheet,
-                  ),
-                ],
-              ),
-            ],
+            children: children,
           ),
         ),
       ),
@@ -334,8 +357,10 @@ class _RuleRow extends StatelessWidget {
 }
 
 class _Section extends StatelessWidget {
-  const _Section({required this.title, required this.children});
-  final String title;
+  const _Section({this.title, required this.children});
+
+  /// None for a card that stands on its own.
+  final String? title;
   final List<Widget> children;
 
   @override
@@ -345,17 +370,18 @@ class _Section extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
-            child: Text(
-              title.toUpperCase(),
-              style: body(
-                11.5,
-                weight: 800,
-                color: GX.muted,
-              ).copyWith(letterSpacing: 1.2),
+          if (title != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
+              child: Text(
+                title!.toUpperCase(),
+                style: body(
+                  11.5,
+                  weight: 800,
+                  color: GX.muted,
+                ).copyWith(letterSpacing: 1.2),
+              ),
             ),
-          ),
           GlassCard(
             padding: EdgeInsets.zero,
             child: Column(

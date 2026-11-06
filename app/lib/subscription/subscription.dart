@@ -61,7 +61,11 @@ class Subscription {
   bool get isStale => DateTime.now().difference(fetchedAt) > updateInterval;
 }
 
-final _tariffLine = RegExp(r'^\s*Тариф:\s*(.+?)\s*$', multiLine: true);
+// `[ \t]*`, not `\s*`: a match must not run past the end of its line.
+final _tariffLine = RegExp(
+  r'^[ \t]*Тариф:[ \t]*(\S.*?)[ \t]*$',
+  multiLine: true,
+);
 
 /// The tariff name from the announce, or null when it has no «Тариф:» line.
 String? parseTariff(String? announce) {
@@ -70,7 +74,7 @@ String? parseTariff(String? announce) {
 }
 
 final _legendLine = RegExp(
-  r'^\s*(🏳|💫|✨)️?\s*[-—]\s*(.+?)\s*$',
+  r'^[ \t]*(🏳|💫|✨)️?[ \t]*[-—][ \t]*(\S.*?)[ \t]*$',
   multiLine: true,
 );
 

@@ -8,16 +8,21 @@ import 'package:gatex/ui/routing_screen.dart';
 void main() {
   late List<RoutingSettings> saved;
 
-  Future<void> pump(WidgetTester t, {RoutingSettings? start}) async {
+  Future<void> pump(
+    WidgetTester t, {
+    RoutingSettings? start,
+    double width = 900,
+    bool android = false,
+  }) async {
     saved = [];
-    t.view.physicalSize = const Size(900, 3000);
+    t.view.physicalSize = Size(width, 3000);
     t.view.devicePixelRatio = 1;
     addTearDown(t.view.reset);
     await t.pumpWidget(
       MaterialApp(
         home: RoutingScreen(
           routing: start ?? RoutingSettings.defaults,
-          android: false,
+          android: android,
           loadProcesses: () async => ['chrome.exe'],
           onSave: (r) async {
             final e = r.validate();
@@ -95,5 +100,22 @@ void main() {
   testWidgets('import and export live behind one row', (t) async {
     await pump(t);
     expect(find.text('Импорт и экспорт правил'), findsOneWidget);
+    // A single row needs no section title of its own.
+    expect(find.text('ОБМЕН'), findsNothing);
   });
+
+  double left(WidgetTester t, String text) =>
+      t.getTopLeft(find.text(text.toUpperCase())).dx;
+
+  testWidgets('wide desktop: presets and own rules in two columns', (t) async {
+    await pump(t, width: 1000);
+    expect(left(t, 'Свои правила'), greaterThan(left(t, 'Готовые наборы')));
+  });
+
+  for (final (width, android) in [(700.0, false), (1000.0, true)]) {
+    testWidgets('one column at $width (android: $android)', (t) async {
+      await pump(t, width: width, android: android);
+      expect(left(t, 'Свои правила'), left(t, 'Готовые наборы'));
+    });
+  }
 }
