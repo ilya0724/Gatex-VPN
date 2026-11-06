@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 
+import '../routing/routing_settings.dart';
 import 'config_builder.dart';
 import 'vpn_core.dart';
 
@@ -44,7 +45,11 @@ class DesktopCore implements VpnCore {
   Future<bool> prepare() async => File(_corePath).existsSync();
 
   @override
-  Future<String?> start(String configJson) async {
+  Future<String?> start(
+    String configJson, {
+    AppsMode mode = AppsMode.all,
+    List<String> apps = const [],
+  }) async {
     if (_process != null) return null;
     _status.add(const VpnStatus(VpnState.connecting));
     if (Platform.isWindows) {

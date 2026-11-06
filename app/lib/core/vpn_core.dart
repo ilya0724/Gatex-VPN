@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'android_core.dart';
+import '../routing/routing_settings.dart';
 import 'config_builder.dart';
 import 'desktop_core.dart';
 
@@ -49,7 +50,14 @@ abstract class VpnCore {
 
   /// Starts the tunnel. Returns the core's error text when it could not
   /// start, null otherwise. Later failures arrive through [status].
-  Future<String?> start(String configJson);
+  ///
+  /// [mode] and [apps] (package names) are the Android per-app VPN; desktop
+  /// ignores them, its per-app rules are process rules in the config.
+  Future<String?> start(
+    String configJson, {
+    AppsMode mode = AppsMode.all,
+    List<String> apps = const [],
+  });
 
   Future<void> stop();
 

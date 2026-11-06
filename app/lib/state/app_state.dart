@@ -477,11 +477,21 @@ class AppState extends ChangeNotifier {
           : 'Подключение: ${target.name}',
     );
     final ipv6 = settings.ipv6 && _ipv6;
-    var failure = await core.start(config(ipv6: ipv6));
+    final appsMode = settings.routing.appsMode;
+    final apps = settings.routing.apps;
+    var failure = await core.start(
+      config(ipv6: ipv6),
+      mode: appsMode,
+      apps: apps,
+    );
     if (failure != null && ipv6 && failure.contains('fdfe:')) {
       _ipv6 = false;
       log('IPv6 недоступен в системе, подключаемся только по IPv4');
-      failure = await core.start(config(ipv6: false));
+      failure = await core.start(
+        config(ipv6: false),
+        mode: appsMode,
+        apps: apps,
+      );
     }
     if (failure != null) {
       vpnState = VpnState.disconnected;

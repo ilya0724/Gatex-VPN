@@ -3,6 +3,9 @@ package ru.gatexx.gatex
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.Drawable
 import android.net.VpnService
 import android.os.Build
 import gatexcore.Gatexcore
@@ -10,6 +13,7 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
+import java.io.ByteArrayOutputStream
 import kotlin.concurrent.thread
 
 class MainActivity : FlutterActivity() {
@@ -33,6 +37,11 @@ class MainActivity : FlutterActivity() {
                     GatexVpnService.configFile(this).writeText(call.argument<String>("config")!!)
                     val start = Intent(this, GatexVpnService::class.java)
                         .setAction(GatexVpnService.ACTION_START)
+                        .putExtra(GatexVpnService.EXTRA_APPS_MODE, call.argument<String>("apps_mode") ?: "all")
+                        .putExtra(
+                            GatexVpnService.EXTRA_APPS,
+                            (call.argument<List<String>>("apps") ?: emptyList()).toTypedArray(),
+                        )
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         startForegroundService(start)
                     } else {
@@ -59,6 +68,14 @@ class MainActivity : FlutterActivity() {
                         }
                         runOnUiThread { result.success(answer) }
                     }
+                }
+                "apps" -> thread {
+                    val list: List<Map<String, Any?>> = try {
+                        installedApps()
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+                    runOnUiThread { result.success(list) }
                 }
                 "version" -> result.success(Gatexcore.version())
                 // The service runs in this process, so the core is shared.
@@ -111,6 +128,38 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+    }
+
+    /** Launchable apps except GateX, sorted by label, icons as 96 px PNG. */
+    private fun installedApps(): List<Map<String, Any?>> {
+        val pm = packageManager
+        val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        return pm.queryIntentActivities(launcher, 0)
+            .map { it.activityInfo.applicationInfo }
+            .filter { it.packageName != packageName }
+            .distinctBy { it.packageName }
+            .map { info ->
+                mapOf(
+                    "package" to info.packageName,
+                    "label" to info.loadLabel(pm).toString(),
+                    "icon" to iconPng(info.loadIcon(pm)),
+                )
+            }
+            .sortedBy { (it["label"] as String).lowercase() }
+    }
+
+    private fun iconPng(icon: Drawable): ByteArray? = try {
+        val size = 96
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        icon.setBounds(0, 0, size, size)
+        icon.draw(canvas)
+        val out = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+        bitmap.recycle()
+        out.toByteArray()
+    } catch (e: Exception) {
+        null
     }
 
     private fun prepare(result: MethodChannel.Result) {

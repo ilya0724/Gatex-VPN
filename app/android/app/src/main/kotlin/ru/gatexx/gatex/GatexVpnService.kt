@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
 import android.net.Network
@@ -27,6 +28,8 @@ class GatexVpnService : VpnService() {
     companion object {
         const val ACTION_START = "ru.gatexx.gatex.START"
         const val ACTION_STOP = "ru.gatexx.gatex.STOP"
+        const val EXTRA_APPS_MODE = "apps_mode"
+        const val EXTRA_APPS = "apps"
         private const val CHANNEL = "vpn"
         private const val TAG = "GatexVpnService"
         private const val NOTIFICATION_ID = 1
@@ -56,6 +59,10 @@ class GatexVpnService : VpnService() {
     private val worker = Executors.newSingleThreadExecutor()
     @Volatile private var tun: ParcelFileDescriptor? = null
 
+    // Per-app VPN from the start intent: all | only | except, and package names.
+    @Volatile private var appsMode = "all"
+    @Volatile private var apps: List<String> = emptyList()
+
     // Set by stopTunnel, cleared by startTunnel; a queued core restart then does nothing.
     @Volatile private var stopping = false
 
@@ -72,7 +79,11 @@ class GatexVpnService : VpnService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> stopTunnel()
-            else -> startTunnel()
+            else -> {
+                appsMode = intent?.getStringExtra(EXTRA_APPS_MODE) ?: "all"
+                apps = intent?.getStringArrayExtra(EXTRA_APPS)?.toList() ?: emptyList()
+                startTunnel()
+            }
         }
         return START_NOT_STICKY
     }
@@ -93,7 +104,7 @@ class GatexVpnService : VpnService() {
                     .addRoute("0.0.0.0", 0)
                     .addDnsServer("1.1.1.1")
                     .addDnsServer("8.8.8.8")
-                    .addDisallowedApplication(packageName)
+                applyApps(builder)
                 try {
                     builder.addAddress("fdfe:dcba:9876::1", 126).addRoute("::", 0)
                 } catch (_: Exception) {
@@ -111,6 +122,39 @@ class GatexVpnService : VpnService() {
                 cleanup()
                 emit("disconnected", e.message ?: e.toString())
                 main.post { finish() }
+            }
+        }
+    }
+
+    /**
+     * Android forbids mixing allowed and disallowed apps on one Builder.
+     * only: just the chosen apps are tunnelled (GateX is not among them,
+     * so Xray's sockets stay outside). all / except: GateX is excluded,
+     * and in except so are the chosen apps. Unknown packages are skipped.
+     */
+    private fun applyApps(builder: Builder) {
+        if (appsMode == "only") {
+            var added = 0
+            for (name in apps) {
+                if (name == packageName) continue
+                try {
+                    builder.addAllowedApplication(name)
+                    added++
+                } catch (_: PackageManager.NameNotFoundException) {
+                }
+            }
+            // An empty allow list would tunnel every app; fail instead.
+            if (added == 0) throw IllegalStateException("Не выбрано ни одного приложения")
+            return
+        }
+        builder.addDisallowedApplication(packageName)
+        if (appsMode == "except") {
+            for (name in apps) {
+                if (name == packageName) continue
+                try {
+                    builder.addDisallowedApplication(name)
+                } catch (_: PackageManager.NameNotFoundException) {
+                }
             }
         }
     }
