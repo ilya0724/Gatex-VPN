@@ -47,6 +47,16 @@ class GatexVpnService : VpnService() {
 
         fun configFile(service: android.content.Context) = File(service.filesDir, "config.json")
 
+        private const val PREFS = "per_app"
+
+        /** Kept next to the config: a start without extras (always-on VPN) reuses it. */
+        fun saveApps(context: android.content.Context, mode: String, apps: List<String>) {
+            context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit()
+                .putString(EXTRA_APPS_MODE, mode)
+                .putStringSet(EXTRA_APPS, apps.toSet())
+                .commit()
+        }
+
         private fun emit(newState: String, newError: String? = null, newReconnecting: Boolean = false) {
             state = newState
             error = newError
@@ -80,8 +90,16 @@ class GatexVpnService : VpnService() {
         when (intent?.action) {
             ACTION_STOP -> stopTunnel()
             else -> {
-                appsMode = intent?.getStringExtra(EXTRA_APPS_MODE) ?: "all"
-                apps = intent?.getStringArrayExtra(EXTRA_APPS)?.toList() ?: emptyList()
+                val extraMode = intent?.getStringExtra(EXTRA_APPS_MODE)
+                if (extraMode != null) {
+                    appsMode = extraMode
+                    apps = intent?.getStringArrayExtra(EXTRA_APPS)?.toList() ?: emptyList()
+                } else {
+                    // Always-on VPN or a null intent: the last saved choice, else all apps.
+                    val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+                    appsMode = prefs.getString(EXTRA_APPS_MODE, null) ?: "all"
+                    apps = prefs.getStringSet(EXTRA_APPS, null)?.toList() ?: emptyList()
+                }
                 startTunnel()
             }
         }

@@ -8,6 +8,7 @@ import android.graphics.Canvas
 import android.graphics.drawable.Drawable
 import android.net.VpnService
 import android.os.Build
+import android.util.Log
 import gatexcore.Gatexcore
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -35,13 +36,13 @@ class MainActivity : FlutterActivity() {
                 "prepare" -> prepare(result)
                 "start" -> {
                     GatexVpnService.configFile(this).writeText(call.argument<String>("config")!!)
+                    val appsMode = call.argument<String>("apps_mode") ?: "all"
+                    val apps = call.argument<List<String>>("apps") ?: emptyList()
+                    GatexVpnService.saveApps(this, appsMode, apps)
                     val start = Intent(this, GatexVpnService::class.java)
                         .setAction(GatexVpnService.ACTION_START)
-                        .putExtra(GatexVpnService.EXTRA_APPS_MODE, call.argument<String>("apps_mode") ?: "all")
-                        .putExtra(
-                            GatexVpnService.EXTRA_APPS,
-                            (call.argument<List<String>>("apps") ?: emptyList()).toTypedArray(),
-                        )
+                        .putExtra(GatexVpnService.EXTRA_APPS_MODE, appsMode)
+                        .putExtra(GatexVpnService.EXTRA_APPS, apps.toTypedArray())
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         startForegroundService(start)
                     } else {
@@ -73,6 +74,7 @@ class MainActivity : FlutterActivity() {
                     val list: List<Map<String, Any?>> = try {
                         installedApps()
                     } catch (e: Exception) {
+                        Log.w("MainActivity", "app query failed", e)
                         emptyList()
                     }
                     runOnUiThread { result.success(list) }
