@@ -121,7 +121,9 @@ Future<AppUpdate?> _checkManifest(
     final url = entry is Map ? entry['url'] : null;
     final sha = entry is Map ? entry['sha256'] : null;
     final notes = (m['notes'] as String?) ?? '';
-    final name = url is String ? trustedAssetName(url, platform) : null;
+    final name = url is String
+        ? trustedAssetName(url, platform, version)
+        : null;
     if (name == null || sha is! String || !_hex64.hasMatch(sha)) {
       return _manual(version, notes);
     }
@@ -152,20 +154,30 @@ bool _assetNameOk(String platform, String name) => switch (platform) {
 
 /// The file name of [url] when it is an https download from this repo's
 /// releases and the name is one of the platform's assets; else null.
-String? trustedAssetName(String url, String platform) {
+String? trustedAssetName(String url, String platform, String version) {
   final uri = Uri.tryParse(url);
+  // An encoded slash or dot could walk out of the repo's path.
   if (uri == null ||
       uri.scheme != 'https' ||
       uri.host != 'github.com' ||
+      uri.hasPort ||
+      uri.userInfo.isNotEmpty ||
       uri.hasQuery ||
+      uri.hasFragment ||
+      uri.path.contains('%') ||
       !uri.path.startsWith(_releaseDownloads)) {
     return null;
   }
   final segs = uri.pathSegments;
   if (segs.length != 6) return null;
+  // The tag is the update's own version: no other release, no downgrade.
+  final tag = segs[4];
+  if (!_tagOk.hasMatch(tag) || tag != 'v$version') return null;
   final name = segs.last;
   return _assetNameOk(platform, name) ? name : null;
 }
+
+final _tagOk = RegExp(r'^v[0-9]+(\.[0-9]+){1,3}([+-][0-9A-Za-z.-]+)?$');
 
 /// A GitHub release as `releases/latest` returns it. [platform] is
 /// `android`, `windows` or `linux`; [abi] the device's first ABI.
@@ -201,7 +213,7 @@ AppUpdate? parseGithubRelease(
     // Never install what cannot be checked.
     if (sha == null ||
         !_hex64.hasMatch(sha) ||
-        trustedAssetName(url, platform) != name) {
+        trustedAssetName(url, platform, version) != name) {
       return _manual(version, notes);
     }
     return AppUpdate(
@@ -312,10 +324,31 @@ void _drop(File f) {
   }
 }
 
+/// Checks the file once more right before it runs: it sat on disk since
+/// the download. A changed file is deleted.
+Future<void> verifyForInstall(String path, AppUpdate u) async {
+  final f = File(path);
+  bool ok;
+  try {
+    ok = f.existsSync() && await _verified(f, u);
+  } on Exception {
+    ok = false;
+  }
+  if (!ok) {
+    _drop(f);
+    throw UpdateException(_corrupt);
+  }
+}
+
 /// Hands the downloaded file to the system. Android shows the package
 /// installer. Windows and Linux replace the app, then [quit] runs (the
 /// caller stops the core there); without it the process exits.
-Future<void> installUpdate(String path, {Future<void> Function()? quit}) async {
+Future<void> installUpdate(
+  String path,
+  AppUpdate update, {
+  Future<void> Function()? quit,
+}) async {
+  await verifyForInstall(path, update);
   if (Platform.isAndroid) {
     final r = await _app.invokeMethod<String>('installApk', {'path': path});
     if (r == 'permission') {
@@ -338,7 +371,8 @@ Future<void> installUpdate(String path, {Future<void> Function()? quit}) async {
       '-Command',
       'try { Start-Process -FilePath ${q(path)} -Verb RunAs -ErrorAction Stop '
           "-ArgumentList '/SILENT','/SUPPRESSMSGBOXES','/NORESTART','/CLOSEAPPLICATIONS' "
-          '} catch { Start-Process -FilePath ${q(Platform.resolvedExecutable)} }',
+          '} catch { Wait-Process -Id $pid -Timeout 10 -ErrorAction SilentlyContinue; '
+          'Start-Process -FilePath ${q(Platform.resolvedExecutable)} }',
     ], mode: ProcessStartMode.detached);
     await _leave(quit);
     return;

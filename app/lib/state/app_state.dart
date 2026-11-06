@@ -947,13 +947,17 @@ class AppState extends ChangeNotifier {
   /// «Установить» (or «Повторить» after a failed install).
   Future<void> applyUpdate() async {
     final f = _updateFile;
-    if (f == null || updatePhase == UpdatePhase.installing) return;
+    final u = update;
+    if (f == null || u == null || updatePhase == UpdatePhase.installing) {
+      return;
+    }
     updatePhase = UpdatePhase.installing;
     updateError = null;
     notifyListeners();
     try {
       await installUpdate(
         f.path,
+        u,
         quit: () async {
           if (connected || busy) await core.stop();
           await DesktopShell.instance.quit();

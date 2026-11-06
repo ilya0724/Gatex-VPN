@@ -151,6 +151,18 @@ void main() {
           'url': good.replaceFirst('GateX-Setup.exe', '..%5Cx.exe'),
           'sha256': sha,
         },
+        {
+          'url': 'https://github.com/ilya0724/Gatex-VPN/releases/download/..%2F..%2F..%2Fattacker%2Frepo%2Freleases%2Fdownload%2Fv1.5.0/GateX-Setup.exe',
+          'sha256': sha,
+        },
+        {
+          'url': good.replaceFirst('github.com', 'github.com:8443'),
+          'sha256': sha,
+        },
+        {'url': good.replaceFirst('github.com', 'u@github.com'), 'sha256': sha},
+        {'url': good.replaceFirst('v1.5.0', 'v1.0.0'), 'sha256': sha},
+        {'url': good.replaceFirst('v1.5.0', 'latest'), 'sha256': sha},
+        {'url': '$good#x', 'sha256': sha},
       ]) {
         final u = await viaManifest(w);
         expect(u!.manual, isTrue, reason: '$w');
@@ -288,6 +300,33 @@ void main() {
       );
     });
 
+    test(
+      'verifyForInstall deletes a file changed after the download',
+      () async {
+        Directory('${dir.path}/updates').createSync();
+        final f = File('${dir.path}/updates/GateX-Setup.exe')
+          ..writeAsBytesSync(body);
+        final u = upd(sha: sha256.convert(body).toString());
+        await verifyForInstall(f.path, u);
+        expect(f.existsSync(), isTrue);
+        f.writeAsBytesSync([...body, 1]);
+        await expectLater(
+          verifyForInstall(
+            f.path,
+            upd(sha: sha256.convert(body).toString(), size: body.length + 1),
+          ),
+          throwsA(
+            isA<UpdateException>().having(
+              (e) => e.message,
+              'message',
+              'Файл повреждён, попробуйте ещё раз',
+            ),
+          ),
+        );
+        expect(f.existsSync(), isFalse);
+      },
+    );
+
     test('existing verified file completes without a request', () async {
       Directory('${dir.path}/updates').createSync();
       File('${dir.path}/updates/GateX-Setup.exe').writeAsBytesSync(body);
@@ -335,6 +374,32 @@ void main() {
       UpdatePhase.installing: ['Устанавливаем…'],
       UpdatePhase.failed: ['Не удалось скачать обновление', 'Повторить'],
     };
+    testWidgets('manual update offers the release page', (t) async {
+      t.view.physicalSize = const Size(360, 640);
+      t.view.devicePixelRatio = 1;
+      addTearDown(t.view.reset);
+      final s = await state(UpdatePhase.available);
+      s.update = AppUpdate(
+        version: '1.4.0',
+        url: releasePage,
+        notes: '',
+        fileName: '',
+      );
+      await t.pumpWidget(
+        MaterialApp(
+          theme: buildTheme(),
+          home: HomeScreen(state: s),
+        ),
+      );
+      await t.pump(const Duration(seconds: 6));
+      expect(t.takeException(), isNull);
+      expect(find.text('Открыть страницу'), findsOneWidget);
+      expect(find.text('Обновить сейчас'), findsNothing);
+      for (final sc in t.stateList<ScrollableState>(find.byType(Scrollable))) {
+        expect(sc.position.maxScrollExtent, 0);
+      }
+    });
+
     for (final entry in texts.entries) {
       for (final size in const [Size(360, 640), Size(720, 520)]) {
         testWidgets('${entry.key.name} ${size.width.toInt()}', (t) async {
