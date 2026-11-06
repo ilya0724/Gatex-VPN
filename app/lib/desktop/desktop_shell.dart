@@ -29,11 +29,11 @@ class DesktopShell with WindowListener, TrayListener {
   static const _defaultSize = Size(920, 580);
 
   /// The window size to open with. 1.3.0 stored a portrait size; the 1.4
-  /// layout is landscape, so such a size is replaced by the default once
-  /// (the next resize stores the new one).
+  /// layout is landscape, so such a size is replaced by the default once:
+  /// only while [migrated] (pref `win.v`) is not set yet.
   @visibleForTesting
-  static Size windowSizeFor(double? w, double? h) {
-    if (w == null || h == null || h > w) return _defaultSize;
+  static Size windowSizeFor(double? w, double? h, {required bool migrated}) {
+    if (w == null || h == null || (!migrated && h > w)) return _defaultSize;
     return Size(
       w.clamp(_minSize.width, 1600).toDouble(),
       h.clamp(_minSize.height, 1400).toDouble(),
@@ -58,14 +58,16 @@ class DesktopShell with WindowListener, TrayListener {
     await windowManager.ensureInitialized();
     _prefs = await SharedPreferences.getInstance();
     final w = _prefs.getDouble('win.w'), h = _prefs.getDouble('win.h');
+    final migrated = (_prefs.getInt('win.v') ?? 0) >= 2;
     final options = WindowOptions(
-      size: windowSizeFor(w, h),
+      size: windowSizeFor(w, h, migrated: migrated),
       minimumSize: _minSize,
       center: true,
       title: 'GateX VPN',
       titleBarStyle: TitleBarStyle.hidden,
       backgroundColor: const Color(0xFF06110E),
     );
+    if (!migrated) await _prefs.setInt('win.v', 2);
     final hidden = startedHidden(args);
     await windowManager.waitUntilReadyToShow(options, () async {
       if (!hidden) {

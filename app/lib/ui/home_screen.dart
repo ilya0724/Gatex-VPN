@@ -306,7 +306,7 @@ class _PlanCard extends StatelessWidget {
               if (alert)
                 FilledButton(
                   style: FilledButton.styleFrom(
-                    minimumSize: const Size(0, 34),
+                    minimumSize: const Size(0, 40),
                     padding: const EdgeInsets.symmetric(horizontal: 14),
                   ),
                   onPressed: () => openLink(Links.cabinet),
@@ -742,7 +742,7 @@ class _LinksRow extends StatelessWidget {
   Widget build(BuildContext context) {
     Widget item(IconData icon, String label, String url) => Expanded(
       child: GlassCard(
-        padding: EdgeInsets.symmetric(vertical: compact ? 8 : 10),
+        padding: EdgeInsets.symmetric(vertical: compact ? 11 : 10),
         onTap: () => openLink(url),
         child: compact
             ? Row(

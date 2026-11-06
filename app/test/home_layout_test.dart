@@ -176,14 +176,32 @@ void main() {
 
   group('window size', () {
     test('first launch uses the landscape default', () {
-      expect(DesktopShell.windowSizeFor(null, null), const Size(920, 580));
+      expect(
+        DesktopShell.windowSizeFor(null, null, migrated: false),
+        const Size(920, 580),
+      );
     });
-    test('a portrait size from 1.3.0 is replaced', () {
-      expect(DesktopShell.windowSizeFor(460, 820), const Size(920, 580));
+    test('a portrait size from 1.3.0 is replaced once', () {
+      expect(
+        DesktopShell.windowSizeFor(460, 820, migrated: false),
+        const Size(920, 580),
+      );
+    });
+    test('a portrait size chosen after the migration is kept', () {
+      expect(
+        DesktopShell.windowSizeFor(760, 900, migrated: true),
+        const Size(760, 900),
+      );
     });
     test('a landscape size is kept and clamped to the minimum', () {
-      expect(DesktopShell.windowSizeFor(1000, 700), const Size(1000, 700));
-      expect(DesktopShell.windowSizeFor(600, 400), const Size(720, 520));
+      expect(
+        DesktopShell.windowSizeFor(1000, 700, migrated: false),
+        const Size(1000, 700),
+      );
+      expect(
+        DesktopShell.windowSizeFor(600, 400, migrated: true),
+        const Size(720, 520),
+      );
     });
   });
 }
