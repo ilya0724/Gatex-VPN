@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Builds app/assets/routing/ads.txt from v2fly/domain-list-community
 # (category-ads-all and its include: lists). Run before flutter build/test.
+# If any list cannot be fetched, the committed ads.txt is kept (exit 0 when it
+# holds at least 500 domains). ADS_BASE_URL overrides the source, for tests.
 set -euo pipefail
 
-base="https://raw.githubusercontent.com/v2fly/domain-list-community/master/data"
+base="${ADS_BASE_URL:-https://raw.githubusercontent.com/v2fly/domain-list-community/master/data}"
 out="$(cd "$(dirname "$0")/../.." && pwd)/app/assets/routing/ads.txt"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
@@ -19,7 +21,8 @@ collect() { # name attr depth
   local name="$1" attr="$2" depth="$3" body inc iattr
   case "$seen" in *" $name@$attr "*) return ;; esac
   seen="$seen$name@$attr "
-  body="$(fetch "$name")" || { echo "warn: cannot fetch $name" >&2; return 0; }
+  # collect runs in pipe subshells, so a failure is recorded in a file, not a variable.
+  body="$(fetch "$name")" || { echo "warn: cannot fetch $name" >&2; : > "$tmp/failed"; return 0; }
   if [ -n "$attr" ]; then
     printf '%s\n' "$body" | grep -E "^[^#]*@$attr([[:space:]]|\$)" | grep -v '^include:' || true
   else
@@ -33,19 +36,31 @@ collect() { # name attr depth
   done
 }
 
+# Lines are dropped with sed, not grep -v: grep -v exits 1 on empty input (a
+# failed fetch) and pipefail would stop the script before the fallback below.
 {
   collect category-ads-all "" 1
 } | sed 's/\r$//' \
   | sed 's/[[:space:]]*#.*$//' \
   | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' \
-  | grep -v '^$' \
-  | grep -v '^include:' \
-  | grep -v '^regexp:' \
-  | grep -v '^keyword:' \
+  | sed '/^$/d; /^include:/d; /^regexp:/d; /^keyword:/d' \
   | sed 's/^domain://; s/^full://' \
   | sed 's/[[:space:]]*@.*$//' \
   | tr 'A-Z' 'a-z' \
   | sort -u > "$tmp/ads.txt"
+
+# A partial download must not replace the committed list, and CI must not fail
+# only because GitHub raw is unreachable while a usable list is committed.
+if [ -e "$tmp/failed" ]; then
+  echo "warn: cannot reach v2fly list, keeping committed ads.txt" >&2
+  kept=0
+  [ -f "$out" ] && kept=$(wc -l < "$out")
+  if [ "$kept" -lt 500 ]; then
+    echo "ads_domains: committed $out has $kept domains, expected at least 500" >&2
+    exit 1
+  fi
+  exit 0
+fi
 
 lines=$(wc -l < "$tmp/ads.txt")
 if [ "$lines" -lt 500 ]; then
