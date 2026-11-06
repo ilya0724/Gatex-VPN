@@ -184,11 +184,31 @@ void main() {
     expect(ads['process'], ['chrome.exe']);
     final ru = rules.firstWhere((r) => _eq(r['domain'], russianDomains));
     expect(ru['process'], ['chrome.exe']);
+    // DNS goes through the system resolver, not the chosen program: port
+    // 53 is tunnelled right before the program rule.
+    expect(rules[rules.length - 3], {
+      'network': 'udp,tcp',
+      'port': '53',
+      'outboundTag': 'proxy',
+    });
     expect(rules[rules.length - 2], {
       'process': ['chrome.exe'],
       'outboundTag': 'proxy',
     });
     expect(rules.last, {'network': 'tcp,udp', 'outboundTag': 'direct'});
+  });
+
+  test('DNS rule only in desktop only-mode with apps', () {
+    for (final r in [
+      _rules(
+        const RoutingSettings(appsMode: AppsMode.except, apps: ['a.exe']),
+        processRules: true,
+      ),
+      _rules(const RoutingSettings(appsMode: AppsMode.only, apps: ['a.exe'])),
+      _rules(const RoutingSettings(), processRules: true),
+    ]) {
+      expect(r.where((x) => x['port'] == '53'), isEmpty);
+    }
   });
 
   test('processRules false: no process field anywhere', () {

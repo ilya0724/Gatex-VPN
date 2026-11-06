@@ -55,7 +55,8 @@ class RoutingRule {
 }
 
 /// Routing choices of the user. [apps] holds Android package names or
-/// desktop process names (lower-case, e.g. `chrome.exe`).
+/// desktop process names exactly as the system reports them (Xray compares
+/// them case-sensitively, e.g. `Telegram.exe`).
 class RoutingSettings {
   const RoutingSettings({
     this.appsMode = AppsMode.all,

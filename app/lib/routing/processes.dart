@@ -1,15 +1,22 @@
 import 'dart:io';
 
-/// Собственные процессы GateX: их нельзя выбирать для маршрутизации.
+/// Собственные процессы GateX (в нижнем регистре): их нельзя выбирать
+/// для маршрутизации.
 const _own = {'gatex.exe', 'gatex-core.exe', 'gatex', 'gatex-core'};
 
+/// Xray сравнивает имя процесса с учётом регистра, поэтому имена остаются
+/// такими, как их сообщает система. Повторы отбрасываются без учёта
+/// регистра: остаётся первое написание.
 List<String> _clean(Iterable<String> names) {
-  final set = <String>{};
+  final seen = <String>{};
+  final out = <String>[];
   for (final raw in names) {
-    final n = raw.trim().toLowerCase();
-    if (n.isNotEmpty && !_own.contains(n)) set.add(n);
+    final n = raw.trim();
+    final key = n.toLowerCase();
+    if (n.isEmpty || _own.contains(key) || !seen.add(key)) continue;
+    out.add(n);
   }
-  return set.toList()..sort();
+  return out..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 }
 
 /// Разбирает вывод `tasklist /fo csv /nh`: имя — первое поле в кавычках.
@@ -24,8 +31,18 @@ List<String> parseTasklistCsv(String out) {
   return _clean(names);
 }
 
-/// Разбирает содержимое `/proc/<pid>/comm` (с завершающим переводом строки).
-List<String> parseProcComm(Iterable<String> names) => _clean(names);
+/// Разбирает цели ссылок `/proc/<pid>/exe`: Xray сравнивает имя файла
+/// программы (а не `comm`, который обрезан до 15 символов). Удалённый
+/// после запуска файл ядро помечает суффиксом ` (deleted)`.
+List<String> parseProcExe(Iterable<String> targets) => _clean([
+  for (var t in targets)
+    if ((t = t.trim()).isNotEmpty)
+      (t.endsWith(' (deleted)')
+              ? t.substring(0, t.length - ' (deleted)'.length)
+              : t)
+          .split('/')
+          .last,
+]);
 
 /// Имена запущенных программ (то, с чем сравнивает поле `process` в Xray).
 /// На Android и других платформах — пустой список.
@@ -42,12 +59,12 @@ Future<List<String>> runningProcesses() async {
         final pid = e.path.split('/').last;
         if (int.tryParse(pid) == null) continue;
         try {
-          names.add(await File('${e.path}/comm').readAsString());
+          names.add(Link('${e.path}/exe').targetSync());
         } catch (_) {
-          // процесс исчез или недоступен
+          // процесс исчез, чужой или это поток ядра без exe
         }
       }
-      return parseProcComm(names);
+      return parseProcExe(names);
     }
   } catch (_) {}
   return [];

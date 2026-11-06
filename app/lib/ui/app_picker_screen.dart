@@ -73,14 +73,25 @@ class _AppPickerScreenState extends State<AppPickerScreen> {
     }
   }
 
-  void _toggle(String id, bool on) =>
-      _set(on ? [..._chosen, id] : _chosen.where((a) => a != id).toList());
+  /// Turning a program on replaces any spelling that differs only in case:
+  /// Xray compares process names case-sensitively, and the running list
+  /// shows the name exactly as the system reports it.
+  void _toggle(String id, bool on) {
+    final rest = [
+      for (final a in _chosen)
+        if (on ? a.toLowerCase() != id.toLowerCase() : a != id) a,
+    ];
+    _set(on ? [...rest, id] : rest);
+  }
 
+  /// The typed name keeps the user's case; a name already chosen in any
+  /// case is not added twice.
   void _addByName() {
-    final n = _name.text.trim().toLowerCase();
+    final n = _name.text.trim();
     if (n.isEmpty) return;
     _name.clear();
-    if (!_chosen.contains(n)) _set([..._chosen, n]);
+    final key = n.toLowerCase();
+    if (!_chosen.any((a) => a.toLowerCase() == key)) _set([..._chosen, n]);
   }
 
   @override

@@ -11,13 +11,27 @@ void main() {
       '"gatex-core.exe","6","Console","1","1 K"\r\n'
       '"Code.exe","7","Console","1","1 K"\r\n',
     );
-    expect(out, ['chrome.exe', 'code.exe']);
+    // Xray compares process names case-sensitively: keep the OS spelling,
+    // the first one wins when two differ only in case.
+    expect(out, ['Chrome.exe', 'Code.exe']);
   });
 
-  test('parseProcComm trims, lower-cases, dedups, drops own', () {
-    final out = parseProcComm(
-      ['firefox\n', 'Bash\n', 'firefox', '', 'gatex\n', 'gatex-core\n'],
-    );
-    expect(out, ['bash', 'firefox']);
+  test('parseTasklistCsv keeps Telegram.exe as the OS reports it', () {
+    final out = parseTasklistCsv('"Telegram.exe","42","Console","1","9 K"\r\n');
+    expect(out, ['Telegram.exe']);
+  });
+
+  test('parseProcExe takes basename of the exe link, drops (deleted), own', () {
+    final out = parseProcExe([
+      '/usr/lib/firefox/firefox',
+      '/usr/bin/bash',
+      '/usr/lib/firefox/firefox (deleted)',
+      '/opt/Telegram/Telegram',
+      '',
+      '/opt/gatex/gatex',
+      '/opt/gatex/lib/GateX-Core',
+      '/usr/share/discord/Discord (deleted)',
+    ]);
+    expect(out, ['bash', 'Discord', 'firefox', 'Telegram']);
   });
 }

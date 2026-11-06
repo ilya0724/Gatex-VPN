@@ -209,7 +209,8 @@ List<Map<String, dynamic>> _serverOutbounds(
 
 /// Rule order: private ranges and server IPs direct, then the app mode,
 /// own rules, ads, Russian sites, and the catch-all. In `only` mode on
-/// desktop everything is tied to the chosen processes and the rest goes direct.
+/// desktop everything is tied to the chosen processes (plus DNS on port 53)
+/// and the rest goes direct.
 List<Map<String, dynamic>> _rules(
   ConnectOptions options,
   Map<String, String> target,
@@ -258,6 +259,9 @@ List<Map<String, dynamic>> _rules(
         'outboundTag': 'block',
       }),
     if (r.directRu) rule({'domain': russianDomains, 'outboundTag': 'direct'}),
+    // DNS queries come from the system resolver, not the chosen programs:
+    // without this they would hit the catch-all and leave direct.
+    if (only) {'network': 'udp,tcp', 'port': '53', ...target},
     if (only) {'process': r.apps, ...target},
     {
       'network': 'tcp,udp',
