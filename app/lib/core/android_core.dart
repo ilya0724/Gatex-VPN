@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart';
 
 import 'config_builder.dart';
@@ -17,17 +18,22 @@ class AndroidCore implements VpnCore {
   @override
   late final Stream<VpnStatus> status = _events
       .receiveBroadcastStream()
-      .map((e) => _decode(e as Map))
+      .map((e) => decodeStatus(e as Map))
       .asBroadcastStream();
 
-  static VpnStatus _decode(Map e) {
+  @visibleForTesting
+  static VpnStatus decodeStatus(Map e) {
     final state = switch (e['state']) {
       'connecting' => VpnState.connecting,
       'connected' => VpnState.connected,
       'disconnecting' => VpnState.disconnecting,
       _ => VpnState.disconnected,
     };
-    return VpnStatus(state, e['error'] as String?);
+    return VpnStatus(
+      state,
+      e['error'] as String?,
+      state == VpnState.connecting && e['reconnecting'] == true,
+    );
   }
 
   @override

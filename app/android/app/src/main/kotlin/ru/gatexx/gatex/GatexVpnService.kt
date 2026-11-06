@@ -13,6 +13,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
+import android.util.Log
 import gatexcore.Gatexcore
 import java.io.File
 import java.util.concurrent.Executors
@@ -27,23 +28,26 @@ class GatexVpnService : VpnService() {
         const val ACTION_START = "ru.gatexx.gatex.START"
         const val ACTION_STOP = "ru.gatexx.gatex.STOP"
         private const val CHANNEL = "vpn"
+        private const val TAG = "GatexVpnService"
         private const val NOTIFICATION_ID = 1
         const val MTU = 1500
 
         @Volatile private var state = "disconnected"
         @Volatile private var error: String? = null
+        @Volatile private var reconnecting = false
         private val main = Handler(Looper.getMainLooper())
 
         /** Set by MainActivity while Flutter listens for status. */
         @Volatile var listener: ((Map<String, Any?>) -> Unit)? = null
 
-        fun current(): Map<String, Any?> = mapOf("state" to state, "error" to error)
+        fun current(): Map<String, Any?> = mapOf("state" to state, "error" to error, "reconnecting" to reconnecting)
 
         fun configFile(service: android.content.Context) = File(service.filesDir, "config.json")
 
-        private fun emit(newState: String, newError: String? = null) {
+        private fun emit(newState: String, newError: String? = null, newReconnecting: Boolean = false) {
             state = newState
             error = newError
+            reconnecting = newReconnecting
             val snapshot = current()
             main.post { listener?.invoke(snapshot) }
         }
@@ -52,11 +56,18 @@ class GatexVpnService : VpnService() {
     private val worker = Executors.newSingleThreadExecutor()
     @Volatile private var tun: ParcelFileDescriptor? = null
 
+    // Set by stopTunnel, cleared by startTunnel; a queued core restart then does nothing.
+    @Volatile private var stopping = false
+
+    // Bumped on every start and stop; a restart scheduled earlier is dropped.
+    @Volatile private var session = 0
+
     // Network change: keep the TUN, restart only the core (API 24+).
     private var netCallback: ConnectivityManager.NetworkCallback? = null
-    private var lastNetwork: Network? = null
-    private var firstNetwork = true
-    private val restartCore = Runnable { restartCoreOnWorker() }
+    @Volatile private var lastNetwork: Network? = null
+    @Volatile private var firstNetwork = true
+    @Volatile private var scheduledSession = 0
+    private val restartCore = Runnable { restartCoreOnWorker(scheduledSession) }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -67,6 +78,8 @@ class GatexVpnService : VpnService() {
     }
 
     private fun startTunnel() {
+        stopping = false
+        session++
         showNotification()
         emit("connecting")
         worker.execute {
@@ -103,6 +116,9 @@ class GatexVpnService : VpnService() {
     }
 
     private fun stopTunnel() {
+        stopping = true
+        session++
+        main.removeCallbacks(restartCore)
         emit("disconnecting")
         worker.execute {
             cleanup()
@@ -130,6 +146,7 @@ class GatexVpnService : VpnService() {
                 lastNetwork = network
                 setUnderlyingNetworks(arrayOf(network))
                 main.removeCallbacks(restartCore)
+                scheduledSession = session
                 main.postDelayed(restartCore, 2000)
             }
 
@@ -141,8 +158,9 @@ class GatexVpnService : VpnService() {
         try {
             cm.registerDefaultNetworkCallback(callback)
             netCallback = callback
-        } catch (_: Exception) {
+        } catch (e: Exception) {
             // Without the callback the tunnel works, it just will not follow network changes.
+            Log.w(TAG, "registerDefaultNetworkCallback failed", e)
         }
     }
 
@@ -156,11 +174,13 @@ class GatexVpnService : VpnService() {
         }
     }
 
-    private fun restartCoreOnWorker() {
+    private fun restartCoreOnWorker(scheduledIn: Int) {
+        if (stopping || scheduledIn != session) return
         worker.execute {
+            if (stopping || scheduledIn != session) return@execute
             val fd = tun ?: return@execute
             try {
-                emit("connecting")
+                emit("connecting", newReconnecting = true)
                 Gatexcore.stop()
                 Gatexcore.start(configFile(this).readText(), fd.fd.toLong())
                 emit("connected")

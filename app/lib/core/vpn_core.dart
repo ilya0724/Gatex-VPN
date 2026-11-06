@@ -8,11 +8,14 @@ import 'desktop_core.dart';
 enum VpnState { disconnected, connecting, connected, disconnecting }
 
 class VpnStatus {
-  const VpnStatus(this.state, [this.error]);
+  const VpnStatus(this.state, [this.error, this.reconnecting = false]);
   final VpnState state;
 
   /// Set when the core stopped on its own or failed to start.
   final String? error;
+
+  /// Android: the service restarts the core after a network change.
+  final bool reconnecting;
 }
 
 /// A delay test result: the round trip in ms, or why it failed.

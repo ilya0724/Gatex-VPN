@@ -71,7 +71,11 @@ class AppState extends ChangeNotifier {
   bool get hasSubscription => subscription != null;
 
   /// A reconnect after a network change or a failed health check runs.
-  bool reconnecting = false;
+  bool get reconnecting => _flowReconnecting || _nativeReconnecting;
+  bool _flowReconnecting = false;
+
+  /// Android: GatexVpnService is restarting the core after a network change.
+  bool _nativeReconnecting = false;
   bool get connected => vpnState == VpnState.connected;
   bool get busy =>
       vpnState == VpnState.connecting || vpnState == VpnState.disconnecting;
@@ -528,6 +532,8 @@ class AppState extends ChangeNotifier {
       if (s.state == VpnState.connected) log('Подключено');
       if (s.state == VpnState.disconnected) log('Отключено');
     }
+    // Only the native restart marks it; connected/disconnected clear it.
+    _nativeReconnecting = s.reconnecting;
     vpnState = s.state;
     _syncLive();
     if (s.error != null) {
@@ -571,12 +577,12 @@ class AppState extends ChangeNotifier {
 
   /// A reconnect the user did not ask for shows «Переподключение…».
   Future<void> _reconnectShowing() async {
-    reconnecting = true;
+    _flowReconnecting = true;
     notifyListeners();
     try {
       await _reconnect();
     } finally {
-      reconnecting = false;
+      _flowReconnecting = false;
       _syncNetWatch();
       notifyListeners();
     }
