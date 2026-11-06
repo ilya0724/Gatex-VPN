@@ -69,10 +69,6 @@ class Settings {
   set routing(RoutingSettings v) =>
       _prefs.setString('set.routing', jsonEncode(v.toJson()));
 
-  /// Russian sites go around the tunnel. Proxy onto [routing].
-  bool get directRu => routing.directRu;
-  set directRu(bool v) => routing = routing.copyWith(directRu: v);
-
   bool get ipv6 => _flag('set.ipv6', true);
   set ipv6(bool v) => _prefs.setBool('set.ipv6', v);
 

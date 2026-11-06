@@ -115,11 +115,10 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     final settings = Settings(prefs);
     expect(settings.routing.directRu, false);
-    expect(settings.directRu, false);
     settings.routing = sample();
     expect(prefs.getString('set.routing'), isNotNull);
     same(sample(), settings.routing);
-    settings.directRu = true;
+    settings.routing = settings.routing.copyWith(directRu: true);
     expect(settings.routing.directRu, true);
     expect(settings.routing.blockAds, true);
   });

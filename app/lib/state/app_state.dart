@@ -15,6 +15,7 @@ import '../core/vpn_core.dart';
 import '../desktop/desktop_shell.dart';
 import '../links.dart';
 import '../routing/ad_domains.dart';
+import '../routing/routing_settings.dart';
 import '../subscription/fetcher.dart';
 import '../subscription/server.dart';
 import '../subscription/subscription.dart';
@@ -201,6 +202,17 @@ class AppState extends ChangeNotifier {
     change(settings);
     notifyListeners();
     if (reconnect && connected) await _reconnect();
+  }
+
+  /// Saves the routing and applies it to a running tunnel. Returns the
+  /// message for the user when [r] cannot be applied; nothing is saved then.
+  Future<String?> updateRouting(RoutingSettings r) async {
+    final error = r.validate();
+    if (error != null) return error;
+    settings.routing = r;
+    notifyListeners();
+    if (connected) await _reconnect();
+    return null;
   }
 
   /// The id the panel counts devices by. Kept once made; new installs

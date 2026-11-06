@@ -3,10 +3,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../desktop/desktop_shell.dart';
+import '../core/android_core.dart';
 import '../links.dart';
+import '../routing/processes.dart';
 import '../state/app_state.dart';
 import '../state/settings.dart';
 import 'journal_screen.dart';
+import 'routing_screen.dart';
 import 'motion.dart';
 import 'theme.dart';
 import 'widgets.dart';
@@ -84,13 +87,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       value: s.autoConnect,
                       onChanged: (v) => _change((s) => s.autoConnect = v),
                     ),
-                    _SwitchRow(
+                    _NavRow(
                       icon: Icons.alt_route_rounded,
-                      title: 'Российские сайты напрямую',
-                      subtitle: 'Банки, Госуслуги, Яндекс и VK работают без VPN и быстрее',
-                      value: s.directRu,
-                      onChanged: (v) =>
-                          _change((s) => s.directRu = v, tunnel: true),
+                      title: 'Маршрутизация',
+                      subtitle: 'Приложения, сайты, российские сайты напрямую',
+                      onTap: _openRouting,
                     ),
                     _NavRow(
                       icon: Icons.dns_rounded,
@@ -190,6 +191,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         );
       },
+    );
+  }
+
+  void _openRouting() {
+    final core = state.core;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => RoutingScreen(
+          routing: state.settings.routing,
+          onSave: state.updateRouting,
+          android: core is AndroidCore,
+          loadApps: core is AndroidCore ? core.installedApps : null,
+          loadProcesses: runningProcesses,
+        ),
+      ),
     );
   }
 
@@ -355,11 +371,13 @@ class _NavRow extends StatelessWidget {
     required this.title,
     required this.onTap,
     this.value,
+    this.subtitle,
     this.danger = false,
   });
   final IconData icon;
   final String title;
   final String? value;
+  final String? subtitle;
   final VoidCallback onTap;
   final bool danger;
 
@@ -375,7 +393,16 @@ class _NavRow extends StatelessWidget {
             Icon(icon, color: danger ? GX.danger : GX.accent, size: 22),
             const SizedBox(width: 18),
             Expanded(
-              child: Text(title, style: body(15, weight: 600, color: color)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: body(15, weight: 600, color: color)),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
+                    Text(subtitle!, style: body(12.5, color: GX.muted)),
+                  ],
+                ],
+              ),
             ),
             if (value != null) Text(value!, style: body(13, color: GX.muted)),
             if (!danger) Icon(Icons.chevron_right_rounded, color: GX.muted),
