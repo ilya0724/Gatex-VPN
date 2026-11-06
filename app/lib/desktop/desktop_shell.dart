@@ -81,13 +81,19 @@ class DesktopShell with WindowListener, TrayListener {
   }
 
   VpnState? _trayState;
+  bool _trayReconnecting = false;
   String? _trayServer;
 
   Future<void> _syncTray() async {
     final s = _state!;
     final server = s.selectedServer?.title ?? 'Авто';
-    if (_trayState == s.vpnState && _trayServer == server) return;
+    if (_trayState == s.vpnState &&
+        _trayServer == server &&
+        _trayReconnecting == s.reconnecting) {
+      return;
+    }
     _trayState = s.vpnState;
+    _trayReconnecting = s.reconnecting;
     _trayServer = server;
     final on = s.connected;
     try {
@@ -96,12 +102,14 @@ class DesktopShell with WindowListener, TrayListener {
             ? 'assets/tray/${on ? 'tray_on' : 'tray_off'}.ico'
             : 'assets/tray/${on ? 'tray_on' : 'tray_off'}.png',
       );
-      final status = switch (s.vpnState) {
-        VpnState.connected => 'Подключено · $server',
-        VpnState.connecting => 'Подключаемся…',
-        VpnState.disconnecting => 'Отключаемся…',
-        VpnState.disconnected => 'Не подключено',
-      };
+      final status = s.reconnecting
+          ? 'Переподключение…'
+          : switch (s.vpnState) {
+              VpnState.connected => 'Подключено · $server',
+              VpnState.connecting => 'Подключаемся…',
+              VpnState.disconnecting => 'Отключаемся…',
+              VpnState.disconnected => 'Не подключено',
+            };
       if (!Platform.isLinux) await trayManager.setToolTip('GateX VPN\n$status');
       await trayManager.setContextMenu(
         Menu(

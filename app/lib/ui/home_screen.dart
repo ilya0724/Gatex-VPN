@@ -442,12 +442,14 @@ class _ConnectBlockState extends State<_ConnectBlock> {
   @override
   Widget build(BuildContext context) {
     final state = widget.state;
-    final (text, color) = switch (state.vpnState) {
-      VpnState.connected => ('Подключено', GX.accent),
-      VpnState.connecting => ('Подключаемся…', GX.text),
-      VpnState.disconnecting => ('Отключаемся…', GX.text),
-      VpnState.disconnected => ('Не подключено', GX.muted),
-    };
+    final (text, color) = state.reconnecting
+        ? ('Переподключение…', GX.text)
+        : switch (state.vpnState) {
+            VpnState.connected => ('Подключено', GX.accent),
+            VpnState.connecting => ('Подключаемся…', GX.text),
+            VpnState.disconnecting => ('Отключаемся…', GX.text),
+            VpnState.disconnected => ('Не подключено', GX.muted),
+          };
     final since = _since;
     String hint;
     if (since != null) {

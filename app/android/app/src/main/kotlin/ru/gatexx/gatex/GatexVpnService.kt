@@ -6,6 +6,8 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.ConnectivityManager
+import android.net.Network
 import android.net.VpnService
 import android.os.Build
 import android.os.Handler
@@ -48,7 +50,13 @@ class GatexVpnService : VpnService() {
     }
 
     private val worker = Executors.newSingleThreadExecutor()
-    private var tun: ParcelFileDescriptor? = null
+    @Volatile private var tun: ParcelFileDescriptor? = null
+
+    // Network change: keep the TUN, restart only the core (API 24+).
+    private var netCallback: ConnectivityManager.NetworkCallback? = null
+    private var lastNetwork: Network? = null
+    private var firstNetwork = true
+    private val restartCore = Runnable { restartCoreOnWorker() }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -85,6 +93,7 @@ class GatexVpnService : VpnService() {
                 Gatexcore.setAssetDir(filesDir.path)
                 Gatexcore.start(configFile(this).readText(), fd.fd.toLong())
                 emit("connected")
+                main.post { watchNetwork() }
             } catch (e: Exception) {
                 cleanup()
                 emit("disconnected", e.message ?: e.toString())
@@ -102,7 +111,69 @@ class GatexVpnService : VpnService() {
         }
     }
 
+    private fun watchNetwork() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return
+        if (netCallback != null || tun == null) return
+        val cm = getSystemService(ConnectivityManager::class.java) ?: return
+        firstNetwork = true
+        lastNetwork = null
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                if (firstNetwork) {
+                    // The first call is the network we are on now.
+                    firstNetwork = false
+                    lastNetwork = network
+                    setUnderlyingNetworks(arrayOf(network))
+                    return
+                }
+                if (network == lastNetwork) return
+                lastNetwork = network
+                setUnderlyingNetworks(arrayOf(network))
+                main.removeCallbacks(restartCore)
+                main.postDelayed(restartCore, 2000)
+            }
+
+            override fun onLost(network: Network) {
+                // The next onAvailable is a network change even if it is the same one.
+                if (network == lastNetwork) lastNetwork = null
+            }
+        }
+        try {
+            cm.registerDefaultNetworkCallback(callback)
+            netCallback = callback
+        } catch (_: Exception) {
+            // Without the callback the tunnel works, it just will not follow network changes.
+        }
+    }
+
+    private fun unwatchNetwork() {
+        main.removeCallbacks(restartCore)
+        val callback = netCallback ?: return
+        netCallback = null
+        try {
+            getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(callback)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun restartCoreOnWorker() {
+        worker.execute {
+            val fd = tun ?: return@execute
+            try {
+                emit("connecting")
+                Gatexcore.stop()
+                Gatexcore.start(configFile(this).readText(), fd.fd.toLong())
+                emit("connected")
+            } catch (e: Exception) {
+                cleanup()
+                emit("disconnected", e.message ?: e.toString())
+                main.post { finish() }
+            }
+        }
+    }
+
     private fun cleanup() {
+        main.post { unwatchNetwork() }
         try {
             Gatexcore.stop()
         } catch (_: Exception) {

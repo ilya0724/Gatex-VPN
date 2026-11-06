@@ -21,6 +21,7 @@ import '../subscription/subscription.dart';
 import '../ui/theme.dart' show GX;
 import 'auto_pick.dart';
 import 'diagnose.dart';
+import 'network_watch.dart';
 import 'settings.dart';
 import 'updates.dart';
 
@@ -68,6 +69,9 @@ class AppState extends ChangeNotifier {
   bool ready = false;
 
   bool get hasSubscription => subscription != null;
+
+  /// A reconnect after a network change or a failed health check runs.
+  bool reconnecting = false;
   bool get connected => vpnState == VpnState.connected;
   bool get busy =>
       vpnState == VpnState.connecting || vpnState == VpnState.disconnecting;
@@ -541,7 +545,45 @@ class AppState extends ChangeNotifier {
   Timer? _liveTimer;
   (int, int)? _lastTraffic;
 
+  /// Desktop: reconnects when the device switches networks. Android does it
+  /// in GatexVpnService.
+  NetworkWatch? _netWatch;
+  StreamSubscription<void>? _netSub;
+
+  void _syncNetWatch() {
+    final want = !Platform.isAndroid && (connected || reconnecting);
+    if (want && _netWatch == null) {
+      final w = _netWatch = NetworkWatch()..start();
+      _netSub = w.changes.listen((_) => unawaited(_onNetworkChange()));
+    } else if (!want && _netWatch != null) {
+      _netSub?.cancel();
+      _netSub = null;
+      _netWatch?.stop();
+      _netWatch = null;
+    }
+  }
+
+  Future<void> _onNetworkChange() async {
+    if (!connected || reconnecting) return;
+    log('Сеть изменилась, переподключаемся');
+    await _reconnectShowing();
+  }
+
+  /// A reconnect the user did not ask for shows «Переподключение…».
+  Future<void> _reconnectShowing() async {
+    reconnecting = true;
+    notifyListeners();
+    try {
+      await _reconnect();
+    } finally {
+      reconnecting = false;
+      _syncNetWatch();
+      notifyListeners();
+    }
+  }
+
   void _syncLive() {
+    _syncNetWatch();
     if (connected && _liveTimer == null) {
       _lastTraffic = null;
       _liveTimer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
@@ -608,7 +650,7 @@ class AppState extends ChangeNotifier {
       await _measureAuto(autoCandidates(servers));
       if (!connected || selectedId != autoServerId) return;
       // The failed server now has no delay, so the pick moves off it.
-      await _reconnect();
+      await _reconnectShowing();
     } finally {
       _healthBusy = false;
     }
