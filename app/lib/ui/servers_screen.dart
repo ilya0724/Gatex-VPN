@@ -95,6 +95,21 @@ class _ServerListState extends State<ServerList> {
             );
           }
         }
+        final legend = state.subscription?.emojiLegend ?? const [];
+        if (legend.isNotEmpty) {
+          items.add(
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 10, 4, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final (emoji, text) in legend)
+                    Text('$emoji — $text', style: body(12, color: GX.muted)),
+                ],
+              ),
+            ),
+          );
+        }
         return RefreshIndicator(
           color: GX.accent,
           onRefresh: state.refresh,

@@ -17,8 +17,10 @@ class _FakeCore extends Fake implements VpnCore {
   Future<String> coreVersion() async => '25.0';
 }
 
-final _announce = [for (var i = 1; i <= 10; i++) 'Строка объявления номер $i']
-    .join('\n');
+final _announce = [
+  'Тариф: Стандарт (LTE)',
+  for (var i = 1; i <= 10; i++) 'Строка объявления номер $i',
+].join('\n');
 
 Future<AppState> _state({RoutingSettings? routing}) async {
   SharedPreferences.setMockInitialValues({});

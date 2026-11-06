@@ -300,6 +300,26 @@ class _PlanCard extends StatelessWidget {
                       until,
                       style: body(12.5, color: alert ? GX.warn : GX.muted),
                     ),
+                    if (sub.tariff != null) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.workspace_premium_rounded,
+                            size: 14,
+                            color: GX.accent,
+                          ),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              sub.tariff!,
+                              style: body(12, weight: 700, color: GX.accent),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),

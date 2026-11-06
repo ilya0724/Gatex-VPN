@@ -43,6 +43,12 @@ class Subscription {
   /// Names of placeholder entries ("Подписка истекла" and similar).
   final List<String> notices;
 
+  /// «Тариф: …» line of the announce, e.g. «Стандарт (LTE)».
+  String? get tariff => parseTariff(announce);
+
+  /// What ✨ 💫 🏳 in server names mean, from the announce.
+  List<(String, String)> get emojiLegend => parseEmojiLegend(announce);
+
   bool get isExpired => expire != null && expire!.isBefore(DateTime.now());
 
   int? get daysLeft {
@@ -53,6 +59,30 @@ class Subscription {
   }
 
   bool get isStale => DateTime.now().difference(fetchedAt) > updateInterval;
+}
+
+final _tariffLine = RegExp(r'^\s*Тариф:\s*(.+?)\s*$', multiLine: true);
+
+/// The tariff name from the announce, or null when it has no «Тариф:» line.
+String? parseTariff(String? announce) {
+  if (announce == null) return null;
+  return _tariffLine.firstMatch(announce)?.group(1);
+}
+
+final _legendLine = RegExp(
+  r'^\s*(🏳|💫|✨)️?\s*[-—]\s*(.+?)\s*$',
+  multiLine: true,
+);
+
+/// «emoji - text» lines of the announce, emoji without U+FE0F, in order,
+/// the first line per emoji wins.
+List<(String, String)> parseEmojiLegend(String? announce) {
+  if (announce == null) return const [];
+  final seen = <String>{};
+  return [
+    for (final m in _legendLine.allMatches(announce))
+      if (seen.add(m.group(1)!)) (m.group(1)!, m.group(2)!),
+  ];
 }
 
 /// Builds a [Subscription] from a raw HTTP response. Headers must be keyed
