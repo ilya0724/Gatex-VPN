@@ -20,6 +20,7 @@ class RoutingScreen extends StatefulWidget {
     required this.android,
     this.loadApps,
     this.loadProcesses,
+    this.embedded = false,
   });
 
   final RoutingSettings routing;
@@ -30,6 +31,9 @@ class RoutingScreen extends StatefulWidget {
   final Future<List<InstalledApp>> Function()? loadApps;
   final Future<List<String>> Function()? loadProcesses;
 
+  /// Shown in the right pane of the wide settings: no back button.
+  final bool embedded;
+
   @override
   State<RoutingScreen> createState() => _RoutingScreenState();
 }
@@ -37,9 +41,8 @@ class RoutingScreen extends StatefulWidget {
 class _RoutingScreenState extends State<RoutingScreen> {
   late RoutingSettings _r = widget.routing;
 
-  void _snack(String text) => ScaffoldMessenger.of(
-    context,
-  ).showSnackBar(SnackBar(content: Text(text)));
+  void _snack(String text) =>
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
 
   /// Shows [next] right away when it is valid and hands it to [onSave]
   /// without waiting: a reconnect may take seconds, and a quick second edit
@@ -146,7 +149,10 @@ class _RoutingScreenState extends State<RoutingScreen> {
     final android = widget.android;
     final what = android ? 'Приложения' : 'Программы';
     return Scaffold(
-      appBar: AppBar(title: const Text('Маршрутизация')),
+      appBar: AppBar(
+        title: const Text('Маршрутизация'),
+        automaticallyImplyLeading: !widget.embedded,
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 560),

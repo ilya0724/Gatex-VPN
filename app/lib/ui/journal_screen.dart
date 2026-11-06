@@ -8,8 +8,11 @@ import 'theme.dart';
 
 /// What the app and the core logged, to copy and send to support.
 class JournalScreen extends StatefulWidget {
-  const JournalScreen({super.key, required this.state});
+  const JournalScreen({super.key, required this.state, this.embedded = false});
   final AppState state;
+
+  /// Shown in the right pane of the wide settings: no back button.
+  final bool embedded;
 
   @override
   State<JournalScreen> createState() => _JournalScreenState();
@@ -57,6 +60,7 @@ class _JournalScreenState extends State<JournalScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Журнал'),
+          automaticallyImplyLeading: !widget.embedded,
           actions: [
             IconButton(
               tooltip: 'Обновить',

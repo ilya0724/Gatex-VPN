@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' show Color, Size;
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
@@ -24,8 +25,20 @@ class DesktopShell with WindowListener, TrayListener {
   /// Started by the system at logon: stay in the tray.
   static bool startedHidden(List<String> args) => args.contains('--hidden');
 
-  static const _minSize = Size(380, 640);
-  static const _defaultSize = Size(460, 820);
+  static const _minSize = Size(720, 520);
+  static const _defaultSize = Size(920, 580);
+
+  /// The window size to open with. 1.3.0 stored a portrait size; the 1.4
+  /// layout is landscape, so such a size is replaced by the default once
+  /// (the next resize stores the new one).
+  @visibleForTesting
+  static Size windowSizeFor(double? w, double? h) {
+    if (w == null || h == null || h > w) return _defaultSize;
+    return Size(
+      w.clamp(_minSize.width, 1600).toDouble(),
+      h.clamp(_minSize.height, 1400).toDouble(),
+    );
+  }
 
   AppState? _state;
   late SharedPreferences _prefs;
@@ -46,9 +59,7 @@ class DesktopShell with WindowListener, TrayListener {
     _prefs = await SharedPreferences.getInstance();
     final w = _prefs.getDouble('win.w'), h = _prefs.getDouble('win.h');
     final options = WindowOptions(
-      size: w != null && h != null
-          ? Size(w.clamp(_minSize.width, 1600), h.clamp(_minSize.height, 1400))
-          : _defaultSize,
+      size: windowSizeFor(w, h),
       minimumSize: _minSize,
       center: true,
       title: 'GateX VPN',

@@ -158,6 +158,9 @@ class ConnectButton extends StatefulWidget {
   final VoidCallback onTap;
   final double size;
 
+  /// Layout space around the round button for its track ring.
+  static const margin = 40.0;
+
   @override
   State<ConnectButton> createState() => _ConnectButtonState();
 }
@@ -238,8 +241,10 @@ class _ConnectButtonState extends State<ConnectButton>
       child: PressScale(
         onTap: widget.onTap,
         child: SizedBox(
-          width: size + 120,
-          height: size + 120,
+          // Room for the static ring only; the ripples and the flash paint
+          // beyond the box, so the screen can give the height to content.
+          width: size + ConnectButton.margin,
+          height: size + ConnectButton.margin,
           child: AnimatedBuilder(
             animation: Listenable.merge([_spin, _ripple, on, _flash]),
             builder: (context, _) {

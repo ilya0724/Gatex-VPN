@@ -124,11 +124,15 @@ abstract final class GX {
       p = palettes.firstWhere((x) => x.id == id, orElse: () => palettes.first);
 }
 
+/// The 1.4 scale: text, card paddings and gaps are 12% smaller than in 1.3
+/// so the home screen fits without scrolling.
+const double kCompact = 0.88;
+
 /// Manrope and Unbounded ship as variable fonts, so weight goes through
 /// the wght axis.
 TextStyle body(double size, {double weight = 500, Color? color}) => TextStyle(
   fontFamily: 'Manrope',
-  fontSize: size,
+  fontSize: size * kCompact,
   color: color ?? GX.text,
   fontVariations: [FontVariation.weight(weight)],
   fontWeight: _nearest(weight),
@@ -138,7 +142,7 @@ TextStyle body(double size, {double weight = 500, Color? color}) => TextStyle(
 TextStyle display(double size, {double weight = 600, Color? color}) =>
     TextStyle(
       fontFamily: 'Unbounded',
-      fontSize: size,
+      fontSize: size * kCompact,
       color: color ?? GX.text,
       fontVariations: [FontVariation.weight(weight)],
       fontWeight: _nearest(weight),
@@ -262,7 +266,7 @@ class GlassCard extends StatefulWidget {
   const GlassCard({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(16),
+    this.padding = const EdgeInsets.all(14),
     this.onTap,
     this.highlight = false,
   });

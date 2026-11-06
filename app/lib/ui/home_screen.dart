@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 import '../core/vpn_core.dart';
 import '../links.dart';
+import '../routing/routing_settings.dart';
 import '../state/app_state.dart';
 import '../state/auto_pick.dart';
 import '../subscription/server.dart';
@@ -28,6 +30,10 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Sections arrive one after another as the intro clears.
   final Duration _base = IntroOverlay.wait;
 
+  /// From this width the button and the server list sit side by side. The
+  /// desktop window's minimum (720) is already landscape.
+  static const _wideFrom = 700.0;
+
   Widget _in(int i, Widget child) =>
       FadeSlideIn.staggered(index: i, base: _base, child: child);
 
@@ -39,7 +45,7 @@ class _HomeScreenState extends State<HomeScreen> {
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, box) =>
-                box.maxWidth >= 860 ? _wide(context) : _narrow(context),
+                box.maxWidth >= _wideFrom ? _wide(context) : _narrow(context),
           ),
         ),
       ),
@@ -58,33 +64,28 @@ class _HomeScreenState extends State<HomeScreen> {
             builder: (context, box) => SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: box.maxHeight),
+              // Everything fits; only a window too short for the minimum
+              // scrolls.
+              child: SizedBox(
+                height: math.max(box.maxHeight, 520),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      children: [
-                        _in(0, _TopBar(state: state)),
-                        ..._notices(1),
-                      ],
+                    _in(0, _TopBar(state: state)),
+                    ..._notices(1),
+                    Expanded(
+                      child: _in(
+                        2,
+                        _Middle(state: state, minButton: 120, maxButton: 200),
+                      ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: _in(2, _ConnectBlock(state: state)),
-                    ),
-                    Column(
-                      children: [
-                        if (state.error != null) ...[
-                          _ErrorCard(state: state),
-                          const SizedBox(height: 12),
-                        ],
-                        _in(3, _ServerTile(state: state)),
-                        const SizedBox(height: 12),
-                        _in(4, const _LinksRow()),
-                        const SizedBox(height: 16),
-                      ],
-                    ),
+                    if (state.error != null) ...[
+                      _ErrorCard(state: state),
+                      const SizedBox(height: 10),
+                    ],
+                    _in(3, _ServerTile(state: state)),
+                    const SizedBox(height: 10),
+                    _in(4, const _LinksRow()),
+                    const SizedBox(height: 12),
                   ],
                 ),
               ),
@@ -100,10 +101,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final state = widget.state;
     return LayoutBuilder(
       builder: (context, box) {
-        final panel = (box.maxWidth * 0.36).clamp(400.0, 540.0);
-        final button = (box.maxHeight * 0.30).clamp(170.0, 260.0);
+        final panel = (box.maxWidth * 0.40).clamp(300.0, 540.0);
         return Padding(
-          padding: const EdgeInsets.fromLTRB(24, 0, 16, 16),
+          padding: const EdgeInsets.fromLTRB(24, 0, 16, 12),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -113,40 +113,28 @@ class _HomeScreenState extends State<HomeScreen> {
                     constraints: const BoxConstraints(maxWidth: 640),
                     child: LayoutBuilder(
                       builder: (context, inner) => SingleChildScrollView(
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            minHeight: inner.maxHeight,
-                          ),
+                        child: SizedBox(
+                          height: math.max(inner.maxHeight, 440),
                           child: Column(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Column(
-                                children: [
-                                  _in(0, _TopBar(state: state)),
-                                  ..._notices(1),
-                                ],
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 16,
-                                ),
+                              _in(0, _TopBar(state: state)),
+                              ..._notices(1),
+                              Expanded(
                                 child: _in(
                                   2,
-                                  _ConnectBlock(
+                                  _Middle(
                                     state: state,
-                                    buttonSize: button,
+                                    minButton: 150,
+                                    maxButton: 240,
+                                    showAuto: true,
                                   ),
                                 ),
                               ),
-                              Column(
-                                children: [
-                                  if (state.error != null) ...[
-                                    _ErrorCard(state: state),
-                                    const SizedBox(height: 12),
-                                  ],
-                                  _in(3, const _LinksRow()),
-                                ],
-                              ),
+                              if (state.error != null) ...[
+                                _ErrorCard(state: state),
+                                const SizedBox(height: 10),
+                              ],
+                              _in(3, const _LinksRow(compact: true)),
                             ],
                           ),
                         ),
@@ -174,7 +162,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 18, 16, 4),
+                          padding: const EdgeInsets.fromLTRB(18, 14, 16, 2),
                           child: Text('Серверы', style: display(18)),
                         ),
                         Expanded(child: ServerList(state: state)),
@@ -196,24 +184,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return [
       if (state.update != null) ...[
         _in(index, _UpdateBanner(state: state)),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
       ],
       _in(index, _PlanCard(sub: sub)),
-      if (sub.announce != null) ...[
-        const SizedBox(height: 12),
-        _in(
-          index,
-          GlassCard(
-            child: Row(
-              children: [
-                Icon(Icons.campaign_outlined, color: GX.accent),
-                const SizedBox(width: 12),
-                Expanded(child: Text(sub.announce!, style: body(14))),
-              ],
-            ),
-          ),
-        ),
-      ],
     ];
   }
 }
@@ -225,7 +198,7 @@ class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
           ValueListenableBuilder<bool>(
@@ -235,7 +208,7 @@ class _TopBar extends StatelessWidget {
               child: Image.asset(
                 GX.mark,
                 key: IntroOverlay.markKeyIfFlying,
-                height: 24,
+                height: 22,
               ),
             ),
           ),
@@ -246,7 +219,7 @@ class _TopBar extends StatelessWidget {
             opacity: state.refreshing ? 1 : 0,
             duration: const Duration(milliseconds: 250),
             child: Padding(
-              padding: EdgeInsets.all(12),
+              padding: EdgeInsets.all(10),
               child: SizedBox(
                 width: 16,
                 height: 16,
@@ -292,14 +265,14 @@ class _PlanCard extends StatelessWidget {
         : 'Осталось ${_days(days!)} · до ${_date(expire)}';
     final used = sub.upload + sub.download;
     return GlassCard(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
       child: Column(
         children: [
           Row(
             children: [
               Container(
-                width: 40,
-                height: 40,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: (alert ? GX.warn : GX.accent).withValues(alpha: 0.14),
@@ -309,10 +282,10 @@ class _PlanCard extends StatelessWidget {
                       ? Icons.hourglass_bottom_rounded
                       : Icons.verified_rounded,
                   color: alert ? GX.warn : GX.accent,
-                  size: 22,
+                  size: 20,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -333,29 +306,40 @@ class _PlanCard extends StatelessWidget {
               if (alert)
                 FilledButton(
                   style: FilledButton.styleFrom(
-                    minimumSize: const Size(0, 38),
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    minimumSize: const Size(0, 34),
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
                   ),
                   onPressed: () => openLink(Links.cabinet),
                   child: const Text('Продлить'),
                 ),
+              // The panel's text lives behind this button, not on the home.
+              if (sub.announce != null && sub.announce!.trim().isNotEmpty)
+                IconButton(
+                  tooltip: 'Информация о подписке',
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(Icons.info_outline_rounded, color: GX.muted),
+                  onPressed: () => _showAnnounce(context, sub.announce!),
+                ),
             ],
           ),
           if (sub.total == 0 && used > 0) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: 6),
             Row(
               children: [
                 Icon(Icons.data_usage_rounded, size: 16, color: GX.muted),
                 const SizedBox(width: 6),
-                Text(
-                  'Трафик: ${formatBytes(used)} · без лимита',
-                  style: body(12, color: GX.muted),
+                Flexible(
+                  child: Text(
+                    'Трафик: ${formatBytes(used)} · без лимита',
+                    style: body(12, color: GX.muted),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
           ],
           if (sub.total > 0) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
@@ -379,6 +363,36 @@ class _PlanCard extends StatelessWidget {
     );
   }
 
+  /// The panel's announcement as it was sent, in a sheet.
+  static void _showAnnounce(BuildContext context, String text) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: GX.bg2,
+      showDragHandle: true,
+      isScrollControlled: true,
+      constraints: const BoxConstraints(maxWidth: 560),
+      builder: (c) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(c).height * 0.7,
+          ),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Информация о подписке', style: display(17)),
+                const SizedBox(height: 12),
+                SelectableText(text, style: body(14)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   static String _date(DateTime d) =>
       '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
 
@@ -393,11 +407,63 @@ class _PlanCard extends StatelessWidget {
   }
 }
 
+/// The space between the plan card and the server tile. The button takes
+/// what is left after the status lines, so nothing needs to scroll; if even
+/// the smallest button does not fit, the block scales down a little.
+class _Middle extends StatelessWidget {
+  const _Middle({
+    required this.state,
+    required this.minButton,
+    required this.maxButton,
+    this.showAuto = false,
+  });
+  final AppState state;
+  final double minButton;
+  final double maxButton;
+
+  /// Wide layout: the server tile is not on this side, so the status line
+  /// names the server «Авто» picked.
+  final bool showAuto;
+
+  @override
+  Widget build(BuildContext context) {
+    // Status + hint, the routing chip, the live stats: what sits under
+    // the button.
+    final chip = state.settings.routing.appsMode != AppsMode.all;
+    final reserve = 46 + (chip ? 34 : 0) + (state.connected ? 66 : 0);
+    return LayoutBuilder(
+      builder: (context, box) {
+        final size = (box.maxHeight - reserve - ConnectButton.margin - 8)
+            .clamp(minButton, maxButton)
+            .toDouble();
+        return Center(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: SizedBox(
+              width: box.maxWidth,
+              child: _ConnectBlock(
+                state: state,
+                buttonSize: size,
+                showAuto: showAuto,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
 /// The button with the status and the session timer under it.
 class _ConnectBlock extends StatefulWidget {
-  const _ConnectBlock({required this.state, this.buttonSize = 188});
+  const _ConnectBlock({
+    required this.state,
+    this.buttonSize = 188,
+    this.showAuto = false,
+  });
   final AppState state;
   final double buttonSize;
+  final bool showAuto;
 
   @override
   State<_ConnectBlock> createState() => _ConnectBlockState();
@@ -457,10 +523,14 @@ class _ConnectBlockState extends State<_ConnectBlock> {
       String two(int n) => n.toString().padLeft(2, '0');
       hint =
           '${two(d.inHours)}:${two(d.inMinutes % 60)}:${two(d.inSeconds % 60)}';
+      final now = widget.showAuto ? _autoNow(state) : null;
+      if (now != null) hint += ' · Авто → ${now.title}';
     } else {
       hint = state.busy ? 'Секунду…' : 'Нажмите, чтобы подключиться';
     }
+    final routing = state.settings.routing;
     return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
         ConnectButton(
           state: state.vpnState,
@@ -485,7 +555,7 @@ class _ConnectBlockState extends State<_ConnectBlock> {
             style: display(20, color: color),
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 4),
         Text(
           hint,
           style: body(
@@ -501,7 +571,52 @@ class _ConnectBlockState extends State<_ConnectBlock> {
               ? const SizedBox(width: double.infinity)
               : _LiveInfo(state: state),
         ),
+        if (routing.appsMode != AppsMode.all) ...[
+          const SizedBox(height: 8),
+          _RouteChip(routing: routing),
+        ],
       ],
+    );
+  }
+}
+
+/// The server «Авто» is connected to right now, if any.
+Server? _autoNow(AppState state) {
+  if (state.selectedServer != null || !state.connected) return null;
+  for (final c in state.servers) {
+    if (c.id == state.autoCurrentId) return c;
+  }
+  return null;
+}
+
+/// Under the status when only some apps use the VPN.
+class _RouteChip extends StatelessWidget {
+  const _RouteChip({required this.routing});
+  final RoutingSettings routing;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = routing.appsMode == AppsMode.only
+        ? 'Только выбранные приложения'
+        : 'Все, кроме выбранных';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: GX.accent.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: GX.accent.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.alt_route_rounded, size: 14, color: GX.accent),
+          const SizedBox(width: 6),
+          Text(
+            '$label · ${routing.apps.length}',
+            style: body(12.5, weight: 600),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -513,12 +628,7 @@ class _ServerTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = state.selectedServer;
-    Server? now;
-    if (s == null && state.connected) {
-      for (final c in state.servers) {
-        if (c.id == state.autoCurrentId) now = c;
-      }
-    }
+    final now = s == null ? _autoNow(state) : null;
     return GlassCard(
       onTap: () => Navigator.of(context)
           .push(MaterialPageRoute(builder: (_) => ServersScreen(state: state))),
@@ -623,21 +733,39 @@ class _UpdateBanner extends StatelessWidget {
 }
 
 class _LinksRow extends StatelessWidget {
-  const _LinksRow();
+  const _LinksRow({this.compact = false});
+
+  /// Icon and label side by side, for the short wide window.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     Widget item(IconData icon, String label, String url) => Expanded(
       child: GlassCard(
-        padding: const EdgeInsets.symmetric(vertical: 14),
+        padding: EdgeInsets.symmetric(vertical: compact ? 8 : 10),
         onTap: () => openLink(url),
-        child: Column(
-          children: [
-            Icon(icon, color: GX.accent, size: 22),
-            const SizedBox(height: 6),
-            Text(label, style: body(12.5, weight: 600)),
-          ],
-        ),
+        child: compact
+            ? Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, color: GX.accent, size: 18),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      label,
+                      style: body(12.5, weight: 600),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              )
+            : Column(
+                children: [
+                  Icon(icon, color: GX.accent, size: 20),
+                  const SizedBox(height: 4),
+                  Text(label, style: body(12.5, weight: 600)),
+                ],
+              ),
       ),
     );
     return Row(
@@ -665,7 +793,7 @@ class _LiveInfo extends StatelessWidget {
   Widget build(BuildContext context) {
     final tabular = const [FontFeature.tabularFigures()];
     return Padding(
-      padding: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.only(top: 8),
       child: Column(
         children: [
           ValueListenableBuilder(
@@ -673,7 +801,7 @@ class _LiveInfo extends StatelessWidget {
             builder: (context, live, _) => Wrap(
               alignment: WrapAlignment.center,
               spacing: 8,
-              runSpacing: 8,
+              runSpacing: 6,
               children: [
                 _Pill(
                   icon: Icons.south_rounded,
@@ -701,10 +829,10 @@ class _LiveInfo extends StatelessWidget {
             builder: (context, exit, _) => AnimatedSwitcher(
               duration: const Duration(milliseconds: 300),
               child: exit == null
-                  ? const SizedBox(height: 8)
+                  ? const SizedBox(height: 4)
                   : Padding(
                       key: ValueKey(exit.ip),
-                      padding: const EdgeInsets.only(top: 8),
+                      padding: const EdgeInsets.only(top: 6),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -740,7 +868,7 @@ class _Pill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: GX.glass,
         borderRadius: BorderRadius.circular(20),

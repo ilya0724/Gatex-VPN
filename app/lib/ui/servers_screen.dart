@@ -67,7 +67,7 @@ class _ServerListState extends State<ServerList> {
             byPing: _byPing,
             onSort: (v) => setState(() => _byPing = v),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           _ServerCard(
             selected: state.selectedId == autoServerId,
             leading: const AutoBadge(),
@@ -88,7 +88,7 @@ class _ServerListState extends State<ServerList> {
                 index: i++ ~/ 2,
                 offset: const Offset(0, 10),
                 child: Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.only(bottom: 6),
                   child: _tile(state, s),
                 ),
               ),
@@ -99,7 +99,7 @@ class _ServerListState extends State<ServerList> {
           color: GX.accent,
           onRefresh: state.refresh,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
             children: items,
           ),
         );
@@ -310,7 +310,7 @@ class _GroupHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 18, 4, 8),
+      padding: const EdgeInsets.fromLTRB(4, 12, 4, 6),
       child: Text(
         label.toUpperCase(),
         style: body(
@@ -344,7 +344,7 @@ class _ServerCard extends StatelessWidget {
     return GlassCard(
       highlight: selected,
       onTap: onTap,
-      padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+      padding: const EdgeInsets.fromLTRB(14, 9, 10, 9),
       child: Row(
         children: [
           leading,
