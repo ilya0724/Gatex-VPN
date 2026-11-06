@@ -534,20 +534,32 @@ class AppState extends ChangeNotifier {
 
   final _reconnectFlight = SingleFlight();
 
-  /// One reconnect at a time; a call while one runs joins it.
+  /// One reconnect at a time. Calls while one runs are folded into a
+  /// single trailing run after it, so the last change is always applied;
+  /// every caller waits for that trailing run.
   Future<void> _reconnect() => _reconnectFlight.run(_doReconnect);
 
   Future<void> _doReconnect() async {
-    // Listen before stopping so the disconnect event cannot slip past.
-    final down = core.status
-        .firstWhere((s) => s.state == VpnState.disconnected)
-        .timeout(
-          const Duration(seconds: 6),
-          onTimeout: () => const VpnStatus(VpnState.disconnected),
-        );
-    await core.stop();
-    await down;
-    await connect();
+    try {
+      // Listen before stopping so the disconnect event cannot slip past.
+      final down = core.status
+          .firstWhere((s) => s.state == VpnState.disconnected)
+          .timeout(
+            const Duration(seconds: 6),
+            onTimeout: () => const VpnStatus(VpnState.disconnected),
+          );
+      await core.stop();
+      await down;
+      await connect();
+    } catch (e) {
+      // Often run unawaited: a locked core.log or a refused VPN permission
+      // must end as a visible error, not an unhandled exception.
+      log('Ошибка переподключения: $e', error: true);
+      error = _humanError('$e');
+      vpnState = VpnState.disconnected;
+      _syncLive();
+      notifyListeners();
+    }
   }
 
   void _onStatus(VpnStatus s) {
@@ -593,9 +605,28 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _onNetworkChange() async {
-    if (!connected || reconnecting) return;
+    // A change during a reconnect still counts: NetworkWatch has already
+    // moved its baseline, and SingleFlight folds it into one trailing run.
+    if (!connected && !_flowReconnecting) return;
+    if (!_autoReconnectAllowed()) return;
     log('Сеть изменилась, переподключаемся');
     await _reconnectShowing();
+  }
+
+  var _autoReconnectOffLogged = false;
+
+  /// Linux starts the core through pkexec, so a reconnect nobody asked for
+  /// would pop up a password prompt with nobody at the screen. Reconnects
+  /// the user starts (connect, server, routing or settings change) stay.
+  bool _autoReconnectAllowed() {
+    if (!Platform.isLinux) return true;
+    if (!_autoReconnectOffLogged) {
+      _autoReconnectOffLogged = true;
+      log(
+        'Автопереподключение на Linux выключено: нужен пароль администратора',
+      );
+    }
+    return false;
   }
 
   /// A reconnect the user did not ask for shows «Переподключение…».
@@ -652,6 +683,7 @@ class AppState extends ChangeNotifier {
         selectedId != autoServerId) {
       return;
     }
+    if (!_autoReconnectAllowed()) return;
     final id = autoCurrentId;
     Server? current;
     for (final s in servers) {
@@ -676,8 +708,14 @@ class AppState extends ChangeNotifier {
       if (++_healthFails < 2) return;
       _healthFails = 0;
       log('Сервер ${current.name} не отвечает, ищем другой', error: true);
-      await _measureAuto(autoCandidates(servers));
+      final candidates = autoCandidates(servers);
+      await _measureAuto(candidates);
       if (!connected || selectedId != autoServerId) return;
+      // Nothing answered and the pick stays on this server: rebuilding the
+      // tunnel would change nothing.
+      final none = candidates.every((s) => delays[s.id] == null);
+      final next = pickAuto(candidates, delays, currentId: current.id);
+      if (none && next?.id == current.id) return;
       // The failed server now has no delay, so the pick moves off it.
       await _reconnectShowing();
     } finally {

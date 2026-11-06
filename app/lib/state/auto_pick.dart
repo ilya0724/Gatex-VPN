@@ -41,7 +41,9 @@ Server? pickAuto(
 /// Runs one job at a time. A call while one runs does not start another
 /// but asks for exactly one more run after it (any number of calls coalesce),
 /// so the last request always sees fresh state. All callers get the same
-/// Future, which completes after the final run.
+/// Future, which completes after the final run. A run that throws does not
+/// cancel the requested one after it; the Future then fails with the last
+/// error once everything has run.
 class SingleFlight {
   Future<void>? _running;
   Future<void> Function()? _job;
@@ -59,14 +61,22 @@ class SingleFlight {
   }
 
   Future<void> _drain() async {
+    Object? error;
+    StackTrace? stack;
     try {
       do {
         _again = false;
-        await _job!();
+        try {
+          await _job!();
+        } catch (e, s) {
+          error = e;
+          stack = s;
+        }
       } while (_again);
     } finally {
       _running = null;
     }
+    if (error != null) Error.throwWithStackTrace(error, stack!);
   }
 }
 

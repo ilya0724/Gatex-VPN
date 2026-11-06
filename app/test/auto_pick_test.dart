@@ -27,6 +27,12 @@ void main() {
     expect(c, [de, nl]);
   });
 
+  test('a Russian server named without the flag is no candidate', () {
+    final ruByName = _s('Россия | X', address: '6.6.6.6');
+    expect(ruByName.isRussian, isTrue);
+    expect(autoCandidates([ruByName, de]), [de]);
+  });
+
   test('server getters', () {
     expect(ru.isRussian, isTrue);
     expect(de.isRussian, isFalse);
@@ -123,6 +129,34 @@ void main() {
     gate.complete();
     await Future.wait([a, b, c]);
     expect(runs, 2);
+    expect(f.running, isFalse);
+    await f.run(job);
+    expect(runs, 3);
+  });
+
+  test('SingleFlight keeps the trailing run after a run threw', () async {
+    final f = SingleFlight();
+    final gate = Completer<void>();
+    var runs = 0;
+    Future<void> job() async {
+      runs++;
+      if (runs == 1) {
+        await gate.future;
+        throw StateError('first');
+      }
+    }
+
+    final a = f.run(job);
+    final b = f.run(job);
+    final errors = <Object>[];
+    for (final x in [a, b]) {
+      x.catchError((Object e) => errors.add(e));
+    }
+    gate.complete();
+    await Future.wait([a, b]).catchError((_) => <void>[]);
+    expect(runs, 2);
+    expect(errors, hasLength(2));
+    expect(errors.every((e) => e is StateError), isTrue);
     expect(f.running, isFalse);
     await f.run(job);
     expect(runs, 3);

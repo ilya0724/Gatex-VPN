@@ -82,8 +82,9 @@ class Server {
   }
 
   /// Russian exits are never picked by «Авто»: the point of the VPN is a
-  /// way out of Russia, and Russian sites go direct anyway.
-  bool get isRussian => flag == '🇷🇺';
+  /// way out of Russia, and Russian sites go direct anyway. The country
+  /// comes from the flag or, without one, from the name («Россия | X»).
+  bool get isRussian => countryCode == 'RU';
 
   /// The panel's own «Авто» entry. The app has its own, so it is hidden.
   bool get isPanelAuto => title.contains('Авто');
