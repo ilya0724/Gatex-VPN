@@ -767,7 +767,7 @@ class _UpdateBanner extends StatelessWidget {
       _ => (
         Icons.system_update_rounded,
         'Доступна версия ${u.version}',
-        'Обновить сейчас',
+        u.manual ? 'Открыть страницу' : 'Обновить сейчас',
         state.startUpdate,
       ),
     };

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -18,7 +19,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 Map<String, dynamic> _asset(String name, {int size = 10, String? digest}) => {
   'name': name,
   'size': size,
-  'browser_download_url': 'https://example.test/dl/$name',
+  'browser_download_url':
+      'https://github.com/ilya0724/Gatex-VPN/releases/download/v1.4.0/$name',
   'digest': ?digest,
 };
 
@@ -26,12 +28,12 @@ Map<String, dynamic> _release({String tag = 'v1.4.0'}) => {
   'tag_name': tag,
   'body': 'Что нового',
   'assets': [
-    _asset('GateX-arm64.apk', size: 111, digest: 'sha256:aa11'),
+    _asset('GateX-arm64.apk', size: 111, digest: 'sha256:${'a' * 64}'),
     _asset('GateX-armv7.apk', size: 222),
-    _asset('GateX.apk', size: 333, digest: 'sha256:bb22'),
+    _asset('GateX.apk', size: 333, digest: 'sha256:${'b' * 64}'),
     _asset('GateX-universal.apk'),
-    _asset('GateX-Setup.exe', size: 444, digest: 'sha256:cc33'),
-    _asset('gatex_1.4.0_amd64.deb', size: 555, digest: 'sha256:dd44'),
+    _asset('GateX-Setup.exe', size: 444, digest: 'sha256:${'c' * 64}'),
+    _asset('gatex_1.4.0_amd64.deb', size: 555, digest: 'sha256:${'d' * 64}'),
     _asset('GateX-1.4.0-linux-x64.tar.gz'),
   ],
 };
@@ -52,8 +54,11 @@ void main() {
       )!;
       expect(u.version, '1.4.0');
       expect(u.fileName, 'GateX-arm64.apk');
-      expect(u.url, 'https://example.test/dl/GateX-arm64.apk');
-      expect(u.sha256, 'aa11');
+      expect(
+        u.url,
+        'https://github.com/ilya0724/Gatex-VPN/releases/download/v1.4.0/GateX-arm64.apk',
+      );
+      expect(u.sha256, 'a' * 64);
       expect(u.size, 111);
       expect(u.notes, 'Что нового');
     });
@@ -71,7 +76,7 @@ void main() {
     test('windows takes the setup exe', () {
       final u = parseGithubRelease(_release(), '1.3.0', platform: 'windows')!;
       expect(u.fileName, 'GateX-Setup.exe');
-      expect(u.sha256, 'cc33');
+      expect(u.sha256, 'c' * 64);
     });
     test('linux takes the versioned amd64 deb', () {
       final u = parseGithubRelease(_release(), '1.3.0', platform: 'linux')!;
@@ -109,26 +114,66 @@ void main() {
       expect(seen.headers['Accept'], 'application/vnd.github+json');
       expect(seen.headers['User-Agent'], 'GateX/1.3.0');
     });
-    test('falls back to the site manifest when GitHub fails', () async {
+    Future<AppUpdate?> viaManifest(Map<String, dynamic> windows) {
       final client = MockClient((req) async {
         if (req.url.host == 'api.github.com') return http.Response('x', 403);
         return http.Response(
-          jsonEncode({
-            'version': '1.5.0',
-            'notes': 'n',
-            'windows': {'url': 'https://example.test/GateX-Setup.exe'},
-          }),
+          jsonEncode({'version': '1.5.0', 'notes': 'n', 'windows': windows}),
           200,
         );
       });
-      final u = await checkForUpdate(
-        '1.3.0',
-        client: client,
-        platform: 'windows',
-      );
+      return checkForUpdate('1.3.0', client: client, platform: 'windows');
+    }
+
+    const good =
+        'https://github.com/ilya0724/Gatex-VPN/releases/download/v1.5.0/GateX-Setup.exe';
+    final sha = 'e' * 64;
+    test('manifest with a trusted url and sha256 is accepted', () async {
+      final u = await viaManifest({'url': good, 'sha256': sha});
       expect(u!.version, '1.5.0');
       expect(u.fileName, 'GateX-Setup.exe');
-      expect(u.sha256, isNull);
+      expect(u.manual, isFalse);
+    });
+    test('manifest without sha256 or with a foreign url is manual', () async {
+      for (final w in [
+        {'url': good},
+        {'url': 'https://example.test/GateX-Setup.exe', 'sha256': sha},
+        {'url': good.replaceFirst('https', 'http'), 'sha256': sha},
+        {
+          'url': good.replaceFirst('GateX-Setup.exe', 'evil.exe'),
+          'sha256': sha,
+        },
+        {
+          'url': good.replaceFirst('GateX-Setup.exe', '..%2F..%2Fx.exe'),
+          'sha256': sha,
+        },
+        {
+          'url': good.replaceFirst('GateX-Setup.exe', '..%5Cx.exe'),
+          'sha256': sha,
+        },
+      ]) {
+        final u = await viaManifest(w);
+        expect(u!.manual, isTrue, reason: '$w');
+        expect(u.url, releasePage);
+      }
+    });
+    test('github release without a digest is manual', () {
+      final r = _release();
+      (r['assets'] as List).removeWhere((a) => a['name'] == 'GateX-Setup.exe');
+      (r['assets'] as List).add(_asset('GateX-Setup.exe'));
+      final u = parseGithubRelease(r, '1.3.0', platform: 'windows')!;
+      expect(u.manual, isTrue);
+      expect(u.url, releasePage);
+    });
+    test('github release with a foreign download url is manual', () {
+      final r = _release();
+      for (final a in r['assets'] as List) {
+        a['browser_download_url'] = 'https://evil.test/${a['name']}';
+      }
+      expect(
+        parseGithubRelease(r, '1.3.0', platform: 'windows')!.manual,
+        isTrue,
+      );
     });
   });
 
@@ -187,6 +232,62 @@ void main() {
       expect(left, isEmpty);
     });
 
+    test('unsafe file name or missing sha256 is refused', () async {
+      for (final name in ['../x.exe', r'..\x.exe', 'a/b.exe']) {
+        final bad = AppUpdate(
+          version: '1.4.0',
+          url: 'https://example.test/x',
+          notes: '',
+          sha256: 'e' * 64,
+          fileName: name,
+        );
+        await expectLater(
+          downloadUpdate(bad, dir.path, client: serve()).drain(),
+          throwsA(isA<UpdateException>()),
+        );
+      }
+      await expectLater(
+        downloadUpdate(upd(), dir.path, client: serve()).drain(),
+        throwsA(isA<UpdateException>()),
+      );
+    });
+
+    test('a stalled body ends with a readable error', () async {
+      final ctl = StreamController<List<int>>();
+      ctl.add(body.sublist(0, 5));
+      final client = MockClient.streaming(
+        (req, _) async => http.StreamedResponse(ctl.stream, 200),
+      );
+      await expectLater(
+        downloadUpdate(
+          upd(sha: sha256.convert(body).toString()),
+          dir.path,
+          client: client,
+          idle: const Duration(milliseconds: 50),
+        ).drain(),
+        throwsA(
+          isA<UpdateException>().having(
+            (e) => e.message,
+            'message',
+            'Загрузка прервалась, попробуйте ещё раз',
+          ),
+        ),
+      );
+      expect(Directory('${dir.path}/updates').listSync(), isEmpty);
+    });
+
+    test('a folder that cannot be created is an UpdateException', () async {
+      final file = File('${dir.path}/blocker')..writeAsStringSync('x');
+      await expectLater(
+        downloadUpdate(
+          upd(sha: sha256.convert(body).toString()),
+          file.path,
+          client: serve(),
+        ).drain(),
+        throwsA(isA<UpdateException>()),
+      );
+    });
+
     test('existing verified file completes without a request', () async {
       Directory('${dir.path}/updates').createSync();
       File('${dir.path}/updates/GateX-Setup.exe').writeAsBytesSync(body);
@@ -219,6 +320,7 @@ void main() {
         url: 'https://example.test/x',
         notes: '',
         fileName: 'GateX-Setup.exe',
+        sha256: 'e' * 64,
       );
       s.updatePhase = phase;
       s.updateProgress = 0.42;

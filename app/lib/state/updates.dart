@@ -29,6 +29,9 @@ class AppUpdate {
   /// Lower-case hex, when the release publishes a digest.
   final String? sha256;
   final int? size;
+
+  /// No safe, verifiable file: the banner opens the release page instead.
+  bool get manual => sha256 == null;
 }
 
 /// A problem the user can read: shown in the banner as is.
@@ -112,20 +115,56 @@ Future<AppUpdate?> _checkManifest(
     if (resp.statusCode != 200) return null;
     final m = jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>;
     final version = m['version'] as String?;
-    final url = (m[platform] as Map?)?['url'] as String?;
-    if (version == null || url == null) return null;
+    if (version == null) return null;
     if (compareVersions(version, currentVersion) <= 0) return null;
-    final segments = Uri.tryParse(url)?.pathSegments ?? const <String>[];
-    final name = segments.isEmpty ? '' : segments.last;
+    final entry = m[platform];
+    final url = entry is Map ? entry['url'] : null;
+    final sha = entry is Map ? entry['sha256'] : null;
+    final notes = (m['notes'] as String?) ?? '';
+    final name = url is String ? trustedAssetName(url, platform) : null;
+    if (name == null || sha is! String || !_hex64.hasMatch(sha)) {
+      return _manual(version, notes);
+    }
     return AppUpdate(
       version: version,
-      url: url,
-      notes: (m['notes'] as String?) ?? '',
-      fileName: name.isEmpty ? 'GateX-update' : name,
+      url: url as String,
+      notes: notes,
+      fileName: name,
+      sha256: sha.toLowerCase(),
     );
   } on Exception {
     return null;
   }
+}
+
+final _hex64 = RegExp(r'^[0-9a-fA-F]{64}$');
+const _releaseDownloads = '/ilya0724/Gatex-VPN/releases/download/';
+
+/// An update the app will not install by itself: opens the release page.
+AppUpdate _manual(String version, String notes) =>
+    AppUpdate(version: version, url: releasePage, notes: notes, fileName: '');
+
+bool _assetNameOk(String platform, String name) => switch (platform) {
+  'android' => name == 'GateX-arm64.apk' || name == 'GateX.apk',
+  'windows' => name == 'GateX-Setup.exe',
+  _ => RegExp(r'^gatex_[0-9A-Za-z.+~-]+_amd64\.deb$').hasMatch(name),
+};
+
+/// The file name of [url] when it is an https download from this repo's
+/// releases and the name is one of the platform's assets; else null.
+String? trustedAssetName(String url, String platform) {
+  final uri = Uri.tryParse(url);
+  if (uri == null ||
+      uri.scheme != 'https' ||
+      uri.host != 'github.com' ||
+      uri.hasQuery ||
+      !uri.path.startsWith(_releaseDownloads)) {
+    return null;
+  }
+  final segs = uri.pathSegments;
+  if (segs.length != 6) return null;
+  final name = segs.last;
+  return _assetNameOk(platform, name) ? name : null;
 }
 
 /// A GitHub release as `releases/latest` returns it. [platform] is
@@ -140,28 +179,37 @@ AppUpdate? parseGithubRelease(
   if (tag is! String) return null;
   final version = tag.startsWith('v') ? tag.substring(1) : tag;
   if (compareVersions(version, current) <= 0) return null;
-  bool matches(String n) => switch (platform) {
-    'android' => n == (abi == 'arm64-v8a' ? 'GateX-arm64.apk' : 'GateX.apk'),
-    'windows' => n == 'GateX-Setup.exe',
-    _ => RegExp(r'^gatex_.*_amd64\.deb$').hasMatch(n),
-  };
+  final notes = (j['body'] as String?) ?? '';
   final assets = j['assets'];
   if (assets is! List) return null;
   for (final a in assets) {
     if (a is! Map) continue;
     final name = a['name'];
     final url = a['browser_download_url'];
-    if (name is! String || url is! String || !matches(name)) continue;
+    if (name is! String ||
+        url is! String ||
+        !_assetNameOk(platform, name) ||
+        (platform == 'android' &&
+            name != (abi == 'arm64-v8a' ? 'GateX-arm64.apk' : 'GateX.apk'))) {
+      continue;
+    }
     final digest = a['digest'];
+    final sha = digest is String && digest.startsWith('sha256:')
+        ? digest.substring(7).toLowerCase()
+        : null;
     final size = a['size'];
+    // Never install what cannot be checked.
+    if (sha == null ||
+        !_hex64.hasMatch(sha) ||
+        trustedAssetName(url, platform) != name) {
+      return _manual(version, notes);
+    }
     return AppUpdate(
       version: version,
       url: url,
-      notes: (j['body'] as String?) ?? '',
+      notes: notes,
       fileName: name,
-      sha256: digest is String && digest.startsWith('sha256:')
-          ? digest.substring(7).toLowerCase()
-          : null,
+      sha256: sha,
       size: size is int ? size : null,
     );
   }
@@ -170,56 +218,71 @@ AppUpdate? parseGithubRelease(
 
 const _corrupt = 'Файл повреждён, попробуйте ещё раз';
 
-/// True when [f] has the published size and digest. Without either there
-/// is nothing to check it against, so [f] is not trusted.
+/// True when [f] has the published digest (and size, when known). Without
+/// a digest there is nothing to check it against, so [f] is not trusted.
 Future<bool> _verified(File f, AppUpdate u) async {
-  if (u.size == null && u.sha256 == null) return false;
+  if (u.sha256 == null) return false;
   if (u.size != null && await f.length() != u.size) return false;
-  if (u.sha256 != null) {
-    final d = await sha256.bind(f.openRead()).first;
-    if (d.toString() != u.sha256) return false;
-  }
-  return true;
+  final d = await sha256.bind(f.openRead()).first;
+  return d.toString() == u.sha256;
 }
 
+const _failed = 'Не удалось скачать обновление';
+
 /// Downloads to `<dir>/updates/<fileName>.part`, yielding 0..1, checks
-/// size and sha256 (when known) and renames to the final name.
+/// size and sha256 and renames to the final name. A body that stays silent
+/// for [idle] ends the download.
 Stream<double> downloadUpdate(
   AppUpdate u,
   String dir, {
   http.Client? client,
+  Duration idle = const Duration(seconds: 30),
 }) async* {
-  final folder = Directory('$dir${Platform.pathSeparator}updates');
-  await folder.create(recursive: true);
-  final target = File('${folder.path}${Platform.pathSeparator}${u.fileName}');
-  final part = File('${target.path}.part');
-  // Older downloads are of no use.
-  for (final e in folder.listSync()) {
-    if (e is File && e.path != target.path) _drop(e);
+  // The name becomes a path: nothing but a plain file name goes through.
+  if (u.sha256 == null ||
+      !RegExp(r'^[A-Za-z0-9._+~-]+$').hasMatch(u.fileName)) {
+    throw UpdateException(_failed);
   }
-  if (target.existsSync()) {
-    if (await _verified(target, u)) {
-      yield 1.0;
-      return;
-    }
-    _drop(target);
-  }
+  if (u.fileName.contains('..')) throw UpdateException(_failed);
   final c = client ?? http.Client();
+  File? part;
   try {
+    final folder = Directory('$dir${Platform.pathSeparator}updates');
+    await folder.create(recursive: true);
+    final target = File('${folder.path}${Platform.pathSeparator}${u.fileName}');
+    part = File('${target.path}.part');
+    // Older downloads are of no use.
+    for (final e in folder.listSync()) {
+      if (e is File && e.path != target.path) _drop(e);
+    }
+    if (target.existsSync()) {
+      if (await _verified(target, u)) {
+        yield 1.0;
+        return;
+      }
+      _drop(target);
+    }
     final req = http.Request('GET', Uri.parse(u.url))
       ..headers['User-Agent'] = 'GateX/${u.version}';
     final resp = await c.send(req).timeout(const Duration(seconds: 20));
     if (resp.statusCode != 200) {
-      throw UpdateException(
-        'Не удалось скачать обновление (${resp.statusCode})',
-      );
+      throw UpdateException('$_failed (${resp.statusCode})');
     }
     final total = u.size ?? resp.contentLength ?? 0;
     final out = part.openWrite();
     var got = 0;
     try {
       yield 0.0;
-      await for (final chunk in resp.stream) {
+      final body = resp.stream.timeout(
+        idle,
+        onTimeout: (sink) {
+          sink.addError(
+            UpdateException('Загрузка прервалась, попробуйте ещё раз'),
+          );
+          sink.close();
+        },
+      );
+      await for (final chunk in body) {
         out.add(chunk);
         got += chunk.length;
         if (total > 0) yield (got / total).clamp(0.0, 1.0);
@@ -227,17 +290,15 @@ Stream<double> downloadUpdate(
     } finally {
       await out.close();
     }
-    if ((u.size != null || u.sha256 != null) && !await _verified(part, u)) {
-      throw UpdateException(_corrupt);
-    }
+    if (!await _verified(part, u)) throw UpdateException(_corrupt);
     await part.rename(target.path);
     yield 1.0;
   } on UpdateException {
-    _drop(part);
+    if (part != null) _drop(part);
     rethrow;
   } on Exception {
-    _drop(part);
-    throw UpdateException('Не удалось скачать обновление');
+    if (part != null) _drop(part);
+    throw UpdateException(_failed);
   } finally {
     if (client == null) c.close();
   }
@@ -267,19 +328,27 @@ Future<void> installUpdate(String path, {Future<void> Function()? quit}) async {
   if (Platform.isWindows) {
     // The installer asks for admin rights; PowerShell can elevate, a plain
     // CreateProcess cannot.
-    final file = "'${path.replaceAll("'", "''")}'";
+    String q(String v) => "'${v.replaceAll("'", "''")}'";
+    // Declined or failed elevation: bring GateX back instead of leaving
+    // nothing running.
     await Process.start('powershell', [
       '-NoProfile',
       '-WindowStyle',
       'Hidden',
       '-Command',
-      'Start-Process -FilePath $file -Verb RunAs -ArgumentList '
-          "'/SILENT','/SUPPRESSMSGBOXES','/NORESTART','/CLOSEAPPLICATIONS'",
+      'try { Start-Process -FilePath ${q(path)} -Verb RunAs -ErrorAction Stop '
+          "-ArgumentList '/SILENT','/SUPPRESSMSGBOXES','/NORESTART','/CLOSEAPPLICATIONS' "
+          '} catch { Start-Process -FilePath ${q(Platform.resolvedExecutable)} }',
     ], mode: ProcessStartMode.detached);
     await _leave(quit);
     return;
   }
-  final installed = (await Process.run('dpkg', ['-s', 'gatex'])).exitCode == 0;
+  var installed = false;
+  try {
+    installed = (await Process.run('dpkg', ['-s', 'gatex'])).exitCode == 0;
+  } on ProcessException {
+    // Not a Debian system.
+  }
   if (!installed) {
     await launchUrl(
       Uri.parse(releasePage),

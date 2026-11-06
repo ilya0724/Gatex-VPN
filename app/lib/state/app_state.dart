@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/config_builder.dart';
 import '../core/vpn_core.dart';
@@ -912,6 +913,11 @@ class AppState extends ChangeNotifier {
   Future<void> startUpdate() async {
     final u = update;
     if (u == null || updatePhase == UpdatePhase.downloading) return;
+    if (u.manual) {
+      // No checksum to verify the file against: the release page instead.
+      unawaited(launchUrl(Uri.parse(releasePage)));
+      return;
+    }
     updatePhase = UpdatePhase.downloading;
     updateProgress = 0;
     updateError = null;
@@ -930,6 +936,10 @@ class AppState extends ChangeNotifier {
       updateError = e.message;
       updatePhase = UpdatePhase.failed;
       log('Обновление: ${e.message}', error: true);
+    } on Exception catch (e) {
+      updateError = 'Не удалось скачать обновление';
+      updatePhase = UpdatePhase.failed;
+      log('Обновление: $e', error: true);
     }
     notifyListeners();
   }
