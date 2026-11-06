@@ -14,6 +14,7 @@ import '../core/config_builder.dart';
 import '../core/vpn_core.dart';
 import '../desktop/desktop_shell.dart';
 import '../links.dart';
+import '../routing/ad_domains.dart';
 import '../subscription/fetcher.dart';
 import '../subscription/server.dart';
 import '../subscription/subscription.dart';
@@ -353,6 +354,20 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  List<String>? _adDomainsCache;
+
+  // Loaded once on the first connect; a failure must not block the VPN.
+  Future<List<String>> _adDomains() async {
+    final cached = _adDomainsCache;
+    if (cached != null) return cached;
+    try {
+      return _adDomainsCache = await loadAdDomains(rootBundle);
+    } catch (e) {
+      log('Список рекламных доменов не загружен: $e', error: true);
+      return const [];
+    }
+  }
+
   Future<void> connect() async {
     error = null;
     final sub = subscription;
@@ -376,6 +391,7 @@ class AppState extends ChangeNotifier {
     // A fresh log per connection keeps the journal about this session.
     if (logFile.existsSync()) logFile.deleteSync();
     final serverIps = await _resolveServers();
+    final adDomains = await _adDomains();
     String config({required bool ipv6}) => buildConnectConfig(
       servers: chosen != null ? [chosen] : servers,
       host: core.tunHost,
@@ -386,6 +402,7 @@ class AppState extends ChangeNotifier {
         dns: settings.dns.servers,
         logFile: coreLogPath,
         serverIps: serverIps,
+        adDomains: adDomains,
       ),
     );
     vpnState = VpnState.connecting;

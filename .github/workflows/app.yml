@@ -31,6 +31,8 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
+      - name: Ad domain list
+        run: bash .github/scripts/ads_domains.sh
       - name: Analyze and test
         working-directory: app
         env:
@@ -88,6 +90,8 @@ jobs:
           keyAlias=$KEY_ALIAS
           keyPassword=$KEY_PASSWORD
           EOF
+      - name: Ad domain list
+        run: bash .github/scripts/ads_domains.sh
       - name: Build APKs
         working-directory: app
         run: |
@@ -118,6 +122,9 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
+      - name: Ad domain list
+        shell: bash
+        run: bash .github/scripts/ads_domains.sh
       - name: Build app
         working-directory: app
         shell: bash
@@ -164,6 +171,8 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
+      - name: Ad domain list
+        run: bash .github/scripts/ads_domains.sh
       - name: Build
         run: |
           sudo apt-get update
