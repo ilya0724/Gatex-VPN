@@ -427,7 +427,7 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<void> connect() async {
+  Future<void> connect({bool skipLast = false}) async {
     error = null;
     final sub = subscription;
     if (sub == null) return;
@@ -446,6 +446,7 @@ class AppState extends ChangeNotifier {
       return;
     }
     var chosen = selectedServer;
+    var lastFromRemembered = false;
     if (chosen != null) autoCurrentId = null;
     if (chosen == null) {
       // Show progress: measuring the candidates takes a few seconds.
@@ -453,7 +454,8 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       final gen = ++_connectGen;
       _measuringGen = gen;
-      final picked = await _pickAuto(gen);
+      final picked = await _pickAuto(gen, useLast: !skipLast);
+      final fromLast = _pickedFromLast;
       // The user may have cancelled or chosen a server while we measured.
       chosen = settleAutoConnect(
         cancelled: gen != _connectGen,
@@ -471,6 +473,7 @@ class AppState extends ChangeNotifier {
         return;
       }
       autoCurrentId = selectedId == autoServerId ? chosen.id : null;
+      lastFromRemembered = fromLast;
     }
     final target = chosen;
     final viaAuto = selectedId == autoServerId;
@@ -514,6 +517,18 @@ class AppState extends ChangeNotifier {
         config(ipv6: false),
         mode: appsMode,
         apps: apps,
+      );
+    }
+    if (failure != null && viaAuto && lastFromRemembered) {
+      // The remembered server did not start: pick again from scratch.
+      log('Авто: ${target.name} не запустился, ищем другой', error: true);
+      _forgetAutoLast();
+      return connect(skipLast: true);
+    }
+    if (failure == null && viaAuto) {
+      unawaited(_prefs.setString('auto.last', target.id));
+      unawaited(
+        _prefs.setInt('auto.last.at', DateTime.now().millisecondsSinceEpoch),
       );
     }
     if (failure != null) {
@@ -707,6 +722,27 @@ class AppState extends ChangeNotifier {
     if (current == null) return;
     _healthBusy = true;
     try {
+      // On an LTE server, look for a way back to the main servers.
+      if (current.isLte) {
+        final main = autoMain(autoCandidates(servers));
+        var n = 0;
+        await Future.wait([
+          for (final s in main)
+            _probe(
+              s,
+              '$_dataDir${Platform.pathSeparator}probe-health-main-${n++}.log',
+              3000,
+            ).then((r) => delays[s.id] = r.ms),
+        ]);
+        if (!connected || selectedId != autoServerId) return;
+        if (main.any((s) => delays[s.id] != null)) {
+          _delaysAt = DateTime.now();
+          log('Авто: основные серверы снова отвечают');
+          _forgetAutoLast();
+          await _reconnectShowing();
+          return;
+        }
+      }
       final dir = _dataDir;
       final r = await _probe(
         current,
@@ -732,6 +768,7 @@ class AppState extends ChangeNotifier {
       final next = pickAuto(candidates, delays, currentId: current.id);
       if (none && next?.id == current.id) return;
       // The failed server now has no delay, so the pick moves off it.
+      _forgetAutoLast();
       await _reconnectShowing();
     } finally {
       _healthBusy = false;
@@ -740,43 +777,74 @@ class AppState extends ChangeNotifier {
 
   /// The «Авто» choice: measures the candidates unless a measurement from
   /// the last 5 minutes exists, then picks sticky to the current server.
-  Future<Server?> _pickAuto(int gen) async {
+  Future<Server?> _pickAuto(int gen, {bool useLast = true}) async {
     try {
-      return await _pickAutoInner();
+      return await _pickAutoInner(useLast: useLast);
     } finally {
       // An older pick finishing must not clear a newer one's flag.
       if (_measuringGen == gen) _measuringGen = null;
     }
   }
 
-  Future<Server?> _pickAutoInner() async {
+  /// Remembered «Авто» server and whether the current pick came from it.
+  String? get _autoLastId => _prefs.getString('auto.last');
+  bool _pickedFromLast = false;
+  var _probeSeq = 0;
+
+  void _forgetAutoLast() {
+    _prefs.remove('auto.last');
+    _prefs.remove('auto.last.at');
+  }
+
+  Future<Server?> _pickAutoInner({bool useLast = true}) async {
+    _pickedFromLast = false;
     final candidates = autoCandidates(servers);
     if (candidates.isEmpty) return null;
-    // The servers screen may be measuring right now; use its result.
-    for (var i = 0; testingDelays && i < 75; i++) {
-      await Future<void>.delayed(const Duration(milliseconds: 200));
-    }
     final at = _delaysAt;
     final fresh =
         at != null &&
         DateTime.now().difference(at) < const Duration(minutes: 5) &&
-        candidates.any((s) => delays[s.id] != null);
-    if (!fresh) await _measureAuto(candidates);
-    return pickAuto(candidates, delays, currentId: autoCurrentId);
+        autoDelaysKnown(candidates, delays);
+    // Delays from the last 5 minutes decide without probing, sticky to the
+    // server in use; a remembered server connects at once; otherwise the
+    // first main server that answers wins.
+    final last = useLast ? _autoLastId : null;
+    if (fresh && !candidates.any((s) => s.id == last)) {
+      return pickAuto(candidates, delays, currentId: autoCurrentId);
+    }
+    final q = await autoQuickPick(
+      candidates,
+      lastId: last,
+      probe: (s) async => (await _probe(
+        s,
+        '$_dataDir${Platform.pathSeparator}probe-auto-${_probeSeq++}.log',
+        3000,
+      )).ms,
+      onResult: (s, ms) {
+        delays[s.id] = ms;
+        _delaysAt = DateTime.now();
+        notifyListeners();
+      },
+      log: log,
+    );
+    _pickedFromLast = q.fromLast;
+    // Fill the rest of the delays without holding the connect back.
+    if (q.fromLast) unawaited(_measureAuto(candidates));
+    return q.server;
   }
 
-  /// Delay of every candidate at once, 3 s each.
+  /// Main candidates first, 3 s each; LTE only if none of them answered.
   Future<void> _measureAuto(List<Server> candidates) async {
-    log('Авто: проверка серверов (${candidates.length})');
-    var n = 0;
-    await Future.wait([
-      for (final s in candidates)
-        _probe(
-          s,
-          '$_dataDir${Platform.pathSeparator}probe-auto-${n++}.log',
-          3000,
-        ).then((r) => delays[s.id] = r.ms),
-    ]);
+    await measureAutoTiers(
+      candidates,
+      delays,
+      (s, n) async => (await _probe(
+        s,
+        '$_dataDir${Platform.pathSeparator}probe-auto-$n.log',
+        3000,
+      )).ms,
+      log,
+    );
     _delaysAt = DateTime.now();
     notifyListeners();
   }

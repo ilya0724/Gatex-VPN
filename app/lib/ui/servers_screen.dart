@@ -73,7 +73,7 @@ class _ServerListState extends State<ServerList> {
             leading: const AutoBadge(),
             title: 'Авто',
             subtitle: Text(
-              'Самый быстрый сервер, переключение при сбое',
+              'Сначала основные серверы, LTE — если они недоступны',
               style: body(12, color: GX.muted),
             ),
             onTap: () => _pick(autoServerId),

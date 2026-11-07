@@ -71,6 +71,151 @@ void main() {
     expect(pickAuto(const [], const {}), isNull);
   });
 
+  group('tiers', () {
+    final main = _s('🇩🇪 Германия', address: '7.7.7.1');
+    final main2 = _s('🇳🇱 Нидерланды', address: '7.7.7.2');
+    final lte = _s('🏳 LTE Антиглушилка 1', address: '7.7.7.3');
+    final lte2 = _s('🏳 LTE Антиглушилка 2', address: '7.7.7.4');
+
+    test('main wins over faster LTE', () {
+      final d = {main.id: 120, lte.id: 30};
+      expect(pickAuto([lte, main], d), main);
+      expect(pickAuto([lte, main], d, currentId: lte.id), main);
+    });
+    test('LTE only when no main delay is known', () {
+      expect(pickAuto([main, lte, lte2], {lte.id: 40, lte2.id: 20}), lte2);
+      expect(
+        pickAuto(
+          [main, lte, lte2],
+          {lte.id: 40, lte2.id: 50},
+          currentId: lte2.id,
+        ),
+        lte2,
+      );
+    });
+    test('nothing known: first main, else first LTE', () {
+      expect(pickAuto([lte, main, main2], const {}), main);
+      expect(pickAuto([lte, lte2], const {}), lte);
+    });
+    test('sticky inside main still works', () {
+      final d = {main.id: 100, main2.id: 40, lte.id: 5};
+      expect(pickAuto([main, main2, lte], d, currentId: main2.id), main2);
+      expect(pickAuto([main, main2, lte], d, currentId: main.id), main2);
+    });
+
+    test('measureAutoTiers does not probe LTE when a main answers', () async {
+      final probed = <String>[];
+      final logs = <String>[];
+      final delays = <String, int?>{};
+      await measureAutoTiers([main, main2, lte], delays, (s, n) async {
+        probed.add(s.id);
+        return s.id == main.id ? 50 : null;
+      }, logs.add);
+      expect(probed, unorderedEquals([main.id, main2.id]));
+      expect(delays[main.id], 50);
+      expect(logs, ['Авто: проверка основных серверов (2)']);
+    });
+    test('measureAutoTiers probes LTE when no main answers', () async {
+      final probed = <String>[];
+      final logs = <String>[];
+      final delays = <String, int?>{};
+      await measureAutoTiers([main, lte, lte2], delays, (s, n) async {
+        probed.add(s.id);
+        return s.id == lte2.id ? 70 : null;
+      }, logs.add);
+      expect(probed, unorderedEquals([main.id, lte.id, lte2.id]));
+      expect(logs.last, 'Авто: основные не ответили, проверяем LTE (2)');
+      expect(pickAuto([main, lte, lte2], delays), lte2);
+    });
+
+    test('remembered server is used without probing', () async {
+      var probes = 0;
+      final q = await autoQuickPick(
+        [main, main2, lte],
+        lastId: main2.id,
+        probe: (s) async {
+          probes++;
+          return 10;
+        },
+      );
+      expect(q.server, main2);
+      expect(q.fromLast, isTrue);
+      expect(probes, 0);
+    });
+    test('remembered server that is no candidate is ignored', () async {
+      final q = await autoQuickPick(
+        [main],
+        lastId: 'gone',
+        probe: (s) async => 10,
+      );
+      expect(q.server, main);
+      expect(q.fromLast, isFalse);
+    });
+    test(
+      'race picks the first responder, not the fastest list order',
+      () async {
+        final seen = <String>[];
+        final q = await autoQuickPick(
+          [main, main2],
+          probe: (s) async {
+            await Future<void>.delayed(
+              Duration(milliseconds: s.id == main.id ? 80 : 10),
+            );
+            return 1;
+          },
+          onResult: (s, ms) => seen.add(s.id),
+        );
+        expect(q.server, main2);
+        // The slower probe is still running and reports later.
+        expect(seen, [main2.id]);
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+        expect(seen, [main2.id, main.id]);
+      },
+    );
+    test('race skips main servers that fail', () async {
+      final q = await autoQuickPick(
+        [main, main2],
+        probe: (s) async {
+          if (s.id == main.id) return null;
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+          return 5;
+        },
+      );
+      expect(q.server, main2);
+    });
+    test('LTE race only when every main fails', () async {
+      final probed = <String>[];
+      final q = await autoQuickPick(
+        [main, main2, lte, lte2],
+        probe: (s) async {
+          probed.add(s.id);
+          return s.id == lte2.id ? 30 : null;
+        },
+      );
+      expect(q.server, lte2);
+      expect(probed.take(2), unorderedEquals([main.id, main2.id]));
+
+      probed.clear();
+      final q2 = await autoQuickPick(
+        [main, lte],
+        probe: (s) async {
+          probed.add(s.id);
+          return 30;
+        },
+      );
+      expect(q2.server, main);
+      expect(probed, [main.id]);
+    });
+    test('nothing answers: first main', () async {
+      final q = await autoQuickPick([
+        lte,
+        main,
+        main2,
+      ], probe: (s) async => null);
+      expect(q.server, main);
+    });
+  });
+
   group('settleAutoConnect', () {
     test('cancelled aborts', () {
       expect(

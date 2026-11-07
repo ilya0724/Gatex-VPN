@@ -117,6 +117,7 @@ void main() {
       ),
     );
     await t.pump(const Duration(seconds: 2));
-    expect(find.textContaining(' — '), findsNothing);
+    expect(find.textContaining('— работает'), findsNothing);
+    expect(find.textContaining('— Обход'), findsNothing);
   });
 }
