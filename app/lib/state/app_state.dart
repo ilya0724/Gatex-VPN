@@ -947,9 +947,10 @@ class AppState extends ChangeNotifier {
       probing.add(s.id);
       notifyListeners();
       final logPath = '$_dataDir${Platform.pathSeparator}probe-$n.log';
-      var r = await _probe(s, logPath, 6000);
-      // A slow LTE route can miss the first window; give it one more go.
-      if (r.ms == null) r = await _probe(s, logPath, 10000);
+      // 4 s is plenty for a working server; a dead one no longer keeps
+      // its spinner for 16 s. Only a slow LTE route gets a second, longer go.
+      var r = await _probe(s, logPath, 4000);
+      if (r.ms == null && s.isLte) r = await _probe(s, logPath, 8000);
       probing.remove(s.id);
       delays[s.id] = r.ms;
       delaysDone++;
