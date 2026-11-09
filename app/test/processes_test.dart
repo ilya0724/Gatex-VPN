@@ -34,4 +34,22 @@ void main() {
     ]);
     expect(out, ['bash', 'Discord', 'firefox', 'Telegram']);
   });
+
+  test('processSpellings covers the case Windows ignores', () {
+    expect(processSpellings(['faceit.exe']), [
+      'faceit.exe',
+      'faceit',
+      'FACEIT',
+      'Faceit',
+    ]);
+    expect(processSpellings(['FACEIT.exe', 'cs2']), [
+      'FACEIT.exe',
+      'FACEIT',
+      'faceit',
+      'Faceit',
+      'cs2',
+      'CS2',
+      'Cs2',
+    ]);
+  });
 }

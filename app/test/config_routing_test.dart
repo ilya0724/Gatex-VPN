@@ -145,6 +145,8 @@ void main() {
     expect(rules.any((r) => r['outboundTag'] == 'block'), isFalse);
   });
 
+  const chrome = ['chrome.exe', 'chrome', 'CHROME', 'Chrome'];
+
   test('except mode: process direct rule right after private + server IPs', () {
     final rules = _rules(
       const RoutingSettings(appsMode: AppsMode.except, apps: ['steam.exe']),
@@ -152,7 +154,7 @@ void main() {
       serverIps: ['1.2.3.4'],
     );
     expect(rules[2], {
-      'process': ['steam.exe'],
+      'process': ['steam.exe', 'steam', 'STEAM', 'Steam'],
       'outboundTag': 'direct',
     });
     expect(rules.last, {'network': 'tcp,udp', 'outboundTag': 'proxy'});
@@ -177,13 +179,13 @@ void main() {
     );
     expect(rules[0].containsKey('process'), isFalse);
     final own = rules.firstWhere((r) => _eq(r['domain'], ['domain:a.com']));
-    expect(own['process'], ['chrome.exe']);
+    expect(own['process'], chrome);
     final ads = rules.firstWhere(
       (r) => _eq(r['domain'], ['domain:doubleclick.net']),
     );
-    expect(ads['process'], ['chrome.exe']);
+    expect(ads['process'], chrome);
     final ru = rules.firstWhere((r) => _eq(r['domain'], russianDomains));
-    expect(ru['process'], ['chrome.exe']);
+    expect(ru['process'], chrome);
     // DNS goes through the system resolver, not the chosen program: port
     // 53 is tunnelled right before the program rule.
     expect(rules[rules.length - 3], {
@@ -192,7 +194,7 @@ void main() {
       'outboundTag': 'proxy',
     });
     expect(rules[rules.length - 2], {
-      'process': ['chrome.exe'],
+      'process': chrome,
       'outboundTag': 'proxy',
     });
     expect(rules.last, {'network': 'tcp,udp', 'outboundTag': 'direct'});

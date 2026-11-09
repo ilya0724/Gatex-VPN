@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../routing/processes.dart' show processSpellings;
 import '../routing/routing_settings.dart';
 import '../subscription/server.dart';
 import '../subscription/subscription.dart' show dialTargets;
@@ -218,10 +219,11 @@ List<Map<String, dynamic>> _rules(
   final r = options.routing;
   final byProcess = options.processRules && r.apps.isNotEmpty;
   final only = byProcess && r.appsMode == AppsMode.only;
+  final apps = byProcess ? processSpellings(r.apps) : const <String>[];
   // In `only` mode a rule matches just the chosen programs.
   Map<String, dynamic> rule(Map<String, dynamic> m) => {
     ...m,
-    if (only) 'process': r.apps,
+    if (only) 'process': apps,
   };
 
   const tags = {
@@ -234,7 +236,7 @@ List<Map<String, dynamic>> _rules(
     if (options.serverIps.isNotEmpty)
       {'ip': options.serverIps, 'outboundTag': 'direct'},
     if (byProcess && r.appsMode == AppsMode.except)
-      {'process': r.apps, 'outboundTag': 'direct'},
+      {'process': apps, 'outboundTag': 'direct'},
     for (final own in r.rules)
       if (own.enabled)
         rule({
@@ -262,7 +264,7 @@ List<Map<String, dynamic>> _rules(
     // DNS queries come from the system resolver, not the chosen programs:
     // without this they would hit the catch-all and leave direct.
     if (only) {'network': 'udp,tcp', 'port': '53', ...target},
-    if (only) {'process': r.apps, ...target},
+    if (only) {'process': apps, ...target},
     {
       'network': 'tcp,udp',
       ...(only ? {'outboundTag': 'direct'} : target),

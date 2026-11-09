@@ -19,6 +19,34 @@ List<String> _clean(Iterable<String> names) {
   return out..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 }
 
+/// Варианты написания для поля `process` в Xray. Xray сравнивает имя
+/// с учётом регистра, а Windows — нет: вписанное вручную `faceit.exe`
+/// не совпало бы с `FACEIT.exe`. Поэтому к каждому имени добавляются
+/// строчный, прописной и «Первая заглавная» варианты (без `.exe`, который
+/// Xray всё равно отбрасывает). Смешанный регистр вроде `FaceIt` покрывает
+/// только выбор из списка запущенных программ.
+List<String> processSpellings(Iterable<String> names) {
+  final out = <String>[];
+  void add(String s) {
+    if (s.isNotEmpty && !out.contains(s)) out.add(s);
+  }
+
+  for (final raw in names) {
+    final n = raw.trim();
+    final stem = n.toLowerCase().endsWith('.exe')
+        ? n.substring(0, n.length - 4)
+        : n;
+    add(n);
+    add(stem);
+    add(stem.toLowerCase());
+    add(stem.toUpperCase());
+    if (stem.isNotEmpty) {
+      add(stem[0].toUpperCase() + stem.substring(1).toLowerCase());
+    }
+  }
+  return out;
+}
+
 /// Разбирает вывод `tasklist /fo csv /nh`: имя — первое поле в кавычках.
 List<String> parseTasklistCsv(String out) {
   final names = <String>[];
