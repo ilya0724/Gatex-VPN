@@ -128,6 +128,36 @@ void main() {
       expect(pickAuto([main, lte, lte2], delays), lte2);
     });
 
+    test('remembered: skipped when fresh delays mark it null', () {
+      expect(
+        usableRemembered([main, main2], {main.id: null}, main.id, fresh: true),
+        isNull,
+      );
+      // Stale delays do not count.
+      expect(
+        usableRemembered([main, main2], {main.id: null}, main.id, fresh: false),
+        main,
+      );
+      // Never measured: usable.
+      expect(
+        usableRemembered([main, main2], {main2.id: 50}, main.id, fresh: true),
+        main,
+      );
+    });
+    test('remembered LTE: skipped when a main has a fresh delay', () {
+      final d = {main.id: 90};
+      expect(usableRemembered([main, lte], d, lte.id, fresh: true), isNull);
+      expect(usableRemembered([main, lte], d, lte.id, fresh: false), lte);
+      expect(
+        usableRemembered([main, lte], {main.id: null}, lte.id, fresh: true),
+        lte,
+      );
+    });
+    test('remembered: null id or non-candidate', () {
+      expect(usableRemembered([main], const {}, null, fresh: true), isNull);
+      expect(usableRemembered([main], const {}, 'x', fresh: true), isNull);
+    });
+
     test('remembered server is used without probing', () async {
       var probes = 0;
       final q = await autoQuickPick(

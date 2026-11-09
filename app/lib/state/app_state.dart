@@ -427,7 +427,7 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<void> connect({bool skipLast = false}) async {
+  Future<void> connect() async {
     error = null;
     final sub = subscription;
     if (sub == null) return;
@@ -454,8 +454,9 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       final gen = ++_connectGen;
       _measuringGen = gen;
-      final picked = await _pickAuto(gen, useLast: !skipLast);
-      final fromLast = _pickedFromLast;
+      final pick = await _pickAuto(gen);
+      final picked = pick.server;
+      final fromLast = pick.fromLast;
       // The user may have cancelled or chosen a server while we measured.
       chosen = settleAutoConnect(
         cancelled: gen != _connectGen,
@@ -519,17 +520,13 @@ class AppState extends ChangeNotifier {
         apps: apps,
       );
     }
-    if (failure != null && viaAuto && lastFromRemembered) {
-      // The remembered server did not start: pick again from scratch.
-      log('Авто: ${target.name} не запустился, ищем другой', error: true);
-      _forgetAutoLast();
-      return connect(skipLast: true);
-    }
     if (failure == null && viaAuto) {
       unawaited(_prefs.setString('auto.last', target.id));
       unawaited(
         _prefs.setInt('auto.last.at', DateTime.now().millisecondsSinceEpoch),
       );
+      // A remembered server came without a probe: check it right now.
+      if (lastFromRemembered) unawaited(_verifyRemembered(target));
     }
     if (failure != null) {
       vpnState = VpnState.disconnected;
@@ -777,18 +774,17 @@ class AppState extends ChangeNotifier {
 
   /// The «Авто» choice: measures the candidates unless a measurement from
   /// the last 5 minutes exists, then picks sticky to the current server.
-  Future<Server?> _pickAuto(int gen, {bool useLast = true}) async {
+  Future<({Server? server, bool fromLast})> _pickAuto(int gen) async {
     try {
-      return await _pickAutoInner(useLast: useLast);
+      return await _pickAutoInner();
     } finally {
       // An older pick finishing must not clear a newer one's flag.
       if (_measuringGen == gen) _measuringGen = null;
     }
   }
 
-  /// Remembered «Авто» server and whether the current pick came from it.
+  /// Remembered «Авто» server.
   String? get _autoLastId => _prefs.getString('auto.last');
-  bool _pickedFromLast = false;
   var _probeSeq = 0;
 
   void _forgetAutoLast() {
@@ -796,30 +792,51 @@ class AppState extends ChangeNotifier {
     _prefs.remove('auto.last.at');
   }
 
-  Future<Server?> _pickAutoInner({bool useLast = true}) async {
-    _pickedFromLast = false;
+  Future<int?> _probeAuto(Server s, [int timeoutMs = 3000]) async =>
+      (await _probe(
+        s,
+        '$_dataDir${Platform.pathSeparator}probe-auto-${_probeSeq++}.log',
+        timeoutMs,
+      )).ms;
+
+  /// 3 s, and one more try: a single lost probe must not drop a server.
+  Future<int?> _probeTwice(Server s) async =>
+      await _probeAuto(s) ?? await _probeAuto(s);
+
+  Future<({Server? server, bool fromLast})> _pickAutoInner() async {
     final candidates = autoCandidates(servers);
-    if (candidates.isEmpty) return null;
+    if (candidates.isEmpty) return (server: null, fromLast: false);
     final at = _delaysAt;
     final fresh =
         at != null &&
-        DateTime.now().difference(at) < const Duration(minutes: 5) &&
-        autoDelaysKnown(candidates, delays);
-    // Delays from the last 5 minutes decide without probing, sticky to the
-    // server in use; a remembered server connects at once; otherwise the
+        DateTime.now().difference(at) < const Duration(minutes: 5);
+    final known = fresh && autoDelaysKnown(candidates, delays);
+    var last = usableRemembered(candidates, delays, _autoLastId, fresh: fresh);
+    // Linux never reconnects on its own (no password prompt unattended), so
+    // a dead remembered server would stay dead: check it before connecting.
+    if (last != null && Platform.isLinux) {
+      final ms = await _probeTwice(last);
+      delays[last.id] = ms;
+      _delaysAt = DateTime.now();
+      if (ms == null) {
+        log('Авто: ${last.name} не отвечает, ищем другой', error: true);
+        _forgetAutoLast();
+        last = null;
+      }
+    }
+    // A remembered server connects at once; delays from the last 5 minutes
+    // decide without probing, sticky to the server in use; otherwise the
     // first main server that answers wins.
-    final last = useLast ? _autoLastId : null;
-    if (fresh && !candidates.any((s) => s.id == last)) {
-      return pickAuto(candidates, delays, currentId: autoCurrentId);
+    if (last == null && known) {
+      return (
+        server: pickAuto(candidates, delays, currentId: autoCurrentId),
+        fromLast: false,
+      );
     }
     final q = await autoQuickPick(
       candidates,
-      lastId: last,
-      probe: (s) async => (await _probe(
-        s,
-        '$_dataDir${Platform.pathSeparator}probe-auto-${_probeSeq++}.log',
-        3000,
-      )).ms,
+      lastId: last?.id,
+      probe: _probeAuto,
       onResult: (s, ms) {
         delays[s.id] = ms;
         _delaysAt = DateTime.now();
@@ -827,24 +844,33 @@ class AppState extends ChangeNotifier {
       },
       log: log,
     );
-    _pickedFromLast = q.fromLast;
     // Fill the rest of the delays without holding the connect back.
-    if (q.fromLast) unawaited(_measureAuto(candidates));
-    return q.server;
+    if (q.fromLast && !Platform.isLinux) unawaited(_measureAuto(candidates));
+    return q;
+  }
+
+  /// Right after a connect to the remembered server, which came unprobed:
+  /// if it does not answer, forget it and reconnect (the pick then races).
+  Future<void> _verifyRemembered(Server target) async {
+    if (Platform.isLinux || !_autoReconnectAllowed()) return;
+    final ms = await _probeTwice(target);
+    // The user may have disconnected or chosen another server meanwhile.
+    if (selectedId != autoServerId ||
+        autoCurrentId != target.id ||
+        vpnState == VpnState.disconnected) {
+      return;
+    }
+    delays[target.id] = ms;
+    _delaysAt = DateTime.now();
+    if (ms != null) return;
+    log('Сервер ${target.name} не отвечает, ищем другой', error: true);
+    _forgetAutoLast();
+    await _reconnectShowing();
   }
 
   /// Main candidates first, 3 s each; LTE only if none of them answered.
   Future<void> _measureAuto(List<Server> candidates) async {
-    await measureAutoTiers(
-      candidates,
-      delays,
-      (s, n) async => (await _probe(
-        s,
-        '$_dataDir${Platform.pathSeparator}probe-auto-$n.log',
-        3000,
-      )).ms,
-      log,
-    );
+    await measureAutoTiers(candidates, delays, (s, _) => _probeAuto(s), log);
     _delaysAt = DateTime.now();
     notifyListeners();
   }
@@ -937,7 +963,11 @@ class AppState extends ChangeNotifier {
   /// which the HTTP error alone ("EOF") does not.
   Future<DelayResult> _probe(Server s, String logPath, int timeoutMs) async {
     final logFile = File(logPath);
-    if (logFile.existsSync()) logFile.deleteSync();
+    try {
+      if (logFile.existsSync()) logFile.deleteSync();
+    } on FileSystemException {
+      // Locked by a probe that has not let go yet; the log is optional.
+    }
     // On Android the probes share one process (and Xray's global logger)
     // with the tunnel, so only the desktop helper gets a probe log.
     final r = await core.measureDelay(

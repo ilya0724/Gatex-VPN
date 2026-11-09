@@ -75,6 +75,29 @@ Server? _pickTier(
   return best;
 }
 
+/// The remembered «Авто» server to connect to at once, or null when it must
+/// not be used: it is no candidate any more; fresh delays ([fresh]) mark it
+/// unreachable; or it is an LTE server while a main server has a fresh delay.
+Server? usableRemembered(
+  List<Server> candidates,
+  Map<String, int?> delays,
+  String? lastId, {
+  required bool fresh,
+}) {
+  if (lastId == null) return null;
+  for (final s in candidates) {
+    if (s.id != lastId) continue;
+    if (fresh) {
+      if (delays.containsKey(s.id) && delays[s.id] == null) return null;
+      if (s.isLte && autoMain(candidates).any((m) => delays[m.id] != null)) {
+        return null;
+      }
+    }
+    return s;
+  }
+  return null;
+}
+
 /// Probes [tier] at once and completes with the first server that answers,
 /// without waiting for the others; null when none does. The probes that are
 /// still running when it completes keep going and report through [onResult]

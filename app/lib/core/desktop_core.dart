@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../routing/routing_settings.dart';
@@ -16,6 +17,17 @@ import 'vpn_core.dart';
 /// we ask through pkexec. The helper watches its stdin, so it shuts down
 /// and removes its routes whenever the app exits, even after a crash.
 class DesktopCore implements VpnCore {
+  DesktopCore({
+    this.startProcess = Process.start,
+    this.launchTimeout = const Duration(seconds: 20),
+  });
+
+  /// How the helper is spawned; replaced in tests.
+  final Future<Process> Function(String exe, List<String> args) startProcess;
+
+  /// The helper must report "started" within this time.
+  final Duration launchTimeout;
+
   final _status = StreamController<VpnStatus>.broadcast();
   Process? _process;
   bool _stopping = false;
@@ -128,12 +140,16 @@ Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | ForE
     ].join('\n');
   }
 
+  @visibleForTesting
+  Future<String?> launchForTest(String exe, List<String> args) =>
+      _launch(exe, args);
+
   /// Starts the helper and waits until it reports "started". Returns null
   /// on success, or the helper's error text.
   Future<String?> _launch(String exe, List<String> args) async {
     final Process p;
     try {
-      p = await Process.start(exe, args);
+      p = await startProcess(exe, args);
     } on ProcessException catch (e) {
       return e.message;
     }
@@ -167,7 +183,15 @@ Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | ForE
       );
     });
 
-    final error = await started.future;
+    final error = await started.future.timeout(
+      launchTimeout,
+      onTimeout: () {
+        // A helper that never says "started" must not hold the connect.
+        p.kill();
+        _status.add(const VpnStatus(VpnState.disconnected));
+        return 'Ядро не запустилось за ${launchTimeout.inSeconds} секунд';
+      },
+    );
     if (error == null) {
       _process = p;
       _status.add(const VpnStatus(VpnState.connected));
