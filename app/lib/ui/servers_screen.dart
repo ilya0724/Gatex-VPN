@@ -52,7 +52,7 @@ class _ServerListState extends State<ServerList> {
   @override
   void initState() {
     super.initState();
-    if (widget.state.delays.isEmpty) widget.state.testDelays();
+    widget.state.testDelaysIfOld();
   }
 
   @override
@@ -278,7 +278,7 @@ class _Toolbar extends StatelessWidget {
         Expanded(
           child: Text(
             state.testingDelays
-                ? 'Проверяем серверы… ${state.delays.length} из ${state.servers.length}'
+                ? 'Проверяем серверы… ${state.delaysDone} из ${state.servers.length}'
                 : state.delays.isEmpty
                 ? '${state.servers.length} серверов'
                 : 'Отвечают $ok из ${state.servers.length} · пинг через сервер',

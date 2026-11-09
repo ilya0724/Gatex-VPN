@@ -143,8 +143,9 @@ class MainActivity : FlutterActivity() {
 
     /**
      * Opens the package installer for the downloaded apk. Returns "started",
-     * or "permission" after opening the "install unknown apps" screen for
-     * GateX, when the user has not allowed it yet.
+     * "permission" after opening the "install unknown apps" screen for
+     * GateX, when the user has not allowed it yet, or "signature" when the
+     * apk is signed with another key and Android would refuse it.
      */
     private fun installApk(path: String): String {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
@@ -156,6 +157,9 @@ class MainActivity : FlutterActivity() {
             )
             return "permission"
         }
+        // Android refuses an apk signed with another key and only says
+        // "app not installed"; tell the user what to do instead.
+        if (!sameSigner(path)) return "signature"
         // The provider only serves files/updates; copy in a file from elsewhere.
         val dir = File(filesDir, "updates").also { it.mkdirs() }
         var file = File(path)
@@ -169,6 +173,40 @@ class MainActivity : FlutterActivity() {
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK),
         )
         return "started"
+    }
+
+    /**
+     * True when the apk at [path] is signed like the installed GateX, or
+     * when that cannot be read (the installer then has the last word).
+     */
+    @Suppress("DEPRECATION")
+    private fun sameSigner(path: String): Boolean = try {
+        val pm = packageManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val flag = PackageManager.GET_SIGNING_CERTIFICATES
+            val apk = pm.getPackageArchiveInfo(path, flag)?.signingInfo
+            val own = pm.getPackageInfo(packageName, flag).signingInfo
+            if (apk == null || own == null) {
+                true
+            } else {
+                val mine = own.apkContentsSigners.map { it.toCharsString() }.toSet()
+                apk.apkContentsSigners.any { it.toCharsString() in mine } ||
+                    (apk.hasPastSigningCertificates() &&
+                        apk.signingCertificateHistory.any { it.toCharsString() in mine })
+            }
+        } else {
+            val flag = PackageManager.GET_SIGNATURES
+            val apk = pm.getPackageArchiveInfo(path, flag)?.signatures
+            val own = pm.getPackageInfo(packageName, flag).signatures
+            if (apk.isNullOrEmpty() || own.isNullOrEmpty()) {
+                true
+            } else {
+                apk.map { it.toCharsString() }.toSet() == own.map { it.toCharsString() }.toSet()
+            }
+        }
+    } catch (e: Exception) {
+        Log.w("GateX", "signature check failed", e)
+        true
     }
 
     /** Launchable apps except GateX, sorted by label, icons as 96 px PNG. */

@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:crypto/crypto.dart';
+import 'package:ffi/ffi.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
@@ -356,24 +359,32 @@ Future<void> installUpdate(
         'Разрешите установку из GateX в настройках и нажмите «Установить» снова',
       );
     }
+    if (r == 'signature') {
+      throw UpdateException(
+        'Эта версия подписана новым ключом. Удалите GateX и установите '
+        'его заново с gatexx.ru — один раз, дальше обновления пойдут сами',
+      );
+    }
     return;
   }
   if (Platform.isWindows) {
-    // The installer asks for admin rights; PowerShell can elevate, a plain
-    // CreateProcess cannot.
-    String q(String v) => "'${v.replaceAll("'", "''")}'";
-    // Declined or failed elevation: bring GateX back instead of leaving
-    // nothing running.
-    await Process.start('powershell', [
-      '-NoProfile',
-      '-WindowStyle',
-      'Hidden',
-      '-Command',
-      'try { Start-Process -FilePath ${q(path)} -Verb RunAs -ErrorAction Stop '
-          "-ArgumentList '/SILENT','/SUPPRESSMSGBOXES','/NORESTART','/CLOSEAPPLICATIONS' "
-          '} catch { Wait-Process -Id $pid -Timeout 10 -ErrorAction SilentlyContinue; '
-          'Start-Process -FilePath ${q(Platform.resolvedExecutable)} }',
-    ], mode: ProcessStartMode.detached);
+    // Ask for admin rights from this process while its window is still in
+    // front, so the UAC prompt shows on top. A hidden helper started after
+    // the window closed got a prompt in the background or none at all, and
+    // GateX quit without installing anything.
+    final code = await Isolate.run(
+      () => _runElevated(path, windowsInstallerArgs),
+    );
+    if (code == _errorCancelled || code == _seErrAccessDenied) {
+      throw UpdateException(
+        'Установка отменена: Windows не дал прав администратора',
+      );
+    }
+    if (code <= 32) {
+      throw UpdateException('Не удалось запустить установщик ($code)');
+    }
+    // The installer runs; it closes whatever is left of GateX and starts
+    // the new version when it is done.
     await _leave(quit);
     return;
   }
@@ -425,4 +436,61 @@ int compareVersions(String a, String b) {
     if (x != y) return x.compareTo(y);
   }
   return 0;
+}
+
+/// Inno Setup switches for an update: no wizard, no questions, close the
+/// running app, start it again at the end (the [Run] entry for silent mode).
+const windowsInstallerArgs =
+    '/SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS';
+
+const _seErrAccessDenied = 5;
+const _errorCancelled = 1223;
+
+typedef _ShellExecuteNative = IntPtr Function(
+  IntPtr hwnd,
+  Pointer<Utf16> verb,
+  Pointer<Utf16> file,
+  Pointer<Utf16> params,
+  Pointer<Utf16> dir,
+  Int32 show,
+);
+typedef _ShellExecuteDart = int Function(
+  int hwnd,
+  Pointer<Utf16> verb,
+  Pointer<Utf16> file,
+  Pointer<Utf16> params,
+  Pointer<Utf16> dir,
+  int show,
+);
+
+/// ShellExecuteW with the "runas" verb: shows the UAC prompt and returns
+/// once the user answered. Above 32 the program started; 5 means declined.
+/// Runs in its own isolate so the window keeps painting meanwhile.
+int _runElevated(String file, String params) {
+  final user32 = DynamicLibrary.open('user32.dll');
+  final shell32 = DynamicLibrary.open('shell32.dll');
+  final ole32 = DynamicLibrary.open('ole32.dll');
+  final foreground = user32.lookupFunction<IntPtr Function(), int Function()>(
+    'GetForegroundWindow',
+  );
+  final coInit = ole32
+      .lookupFunction<
+        Int32 Function(Pointer<Void>, Uint32),
+        int Function(Pointer<Void>, int)
+      >('CoInitializeEx');
+  final shellExecute = shell32
+      .lookupFunction<_ShellExecuteNative, _ShellExecuteDart>('ShellExecuteW');
+  // COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE, as ShellExecute asks.
+  coInit(nullptr, 0x2 | 0x4);
+  final verb = 'runas'.toNativeUtf16();
+  final f = file.toNativeUtf16();
+  final p = params.toNativeUtf16();
+  try {
+    // SW_SHOWNORMAL: the installer's progress window is visible.
+    return shellExecute(foreground(), verb, f, p, nullptr, 1);
+  } finally {
+    calloc.free(verb);
+    calloc.free(f);
+    calloc.free(p);
+  }
 }

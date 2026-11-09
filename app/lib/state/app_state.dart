@@ -175,6 +175,11 @@ class AppState extends ChangeNotifier {
     }
     unawaited(_checkUpdate());
     Timer.periodic(const Duration(hours: 6), (_) => unawaited(_checkUpdate()));
+    testDelaysIfOld();
+    Timer.periodic(
+      const Duration(minutes: 10),
+      (_) => testDelaysIfOld(const Duration(minutes: 9)),
+    );
   }
 
   void log(String text, {bool error = false}) {
@@ -368,6 +373,8 @@ class AppState extends ChangeNotifier {
     subscription = raw.parse();
     _save(raw);
     delays.removeWhere((id, _) => !servers.any((s) => s.id == id));
+    // New or changed servers: measure them all again.
+    unawaited(testDelays());
     final wasPanelAuto = selectedServer?.isPanelAuto ?? false;
     if (wasPanelAuto) {
       select(autoServerId);
@@ -924,39 +931,50 @@ class AppState extends ChangeNotifier {
   /// Servers whose delay test is running right now.
   final probing = <String>{};
 
+  /// Servers done in the running (or last) delay test.
+  int delaysDone = 0;
+
+  /// Every server at once. Old results stay on screen until a server's new
+  /// one arrives, so the list does not blank out on each automatic run.
   Future<void> testDelays() async {
     if (testingDelays || servers.isEmpty) return;
     testingDelays = true;
-    delays.clear();
-    delayErrors.clear();
+    delaysDone = 0;
+    final list = [...servers];
     notifyListeners();
-    log('Проверка серверов: ${servers.length}');
-    final queue = [...servers];
-    var n = 0;
-    Future<void> worker() async {
-      while (queue.isNotEmpty) {
-        final s = queue.removeAt(0);
-        probing.add(s.id);
-        notifyListeners();
-        final logPath = '$_dataDir${Platform.pathSeparator}probe-${n++}.log';
-        var r = await _probe(s, logPath, 6000);
-        // A slow LTE route can miss the first window; give it one more go.
-        if (r.ms == null) r = await _probe(s, logPath, 10000);
-        probing.remove(s.id);
-        delays[s.id] = r.ms;
-        if (r.ms == null) {
-          final failure = DelayFailure.from(r.error ?? '');
-          delayErrors[s.id] = failure;
-          log('${s.name}: ${failure.summary}\n${failure.detail}', error: true);
-        }
-        notifyListeners();
+    log('Проверка серверов: ${list.length}');
+    Future<void> one(Server s, int n) async {
+      probing.add(s.id);
+      notifyListeners();
+      final logPath = '$_dataDir${Platform.pathSeparator}probe-$n.log';
+      var r = await _probe(s, logPath, 6000);
+      // A slow LTE route can miss the first window; give it one more go.
+      if (r.ms == null) r = await _probe(s, logPath, 10000);
+      probing.remove(s.id);
+      delays[s.id] = r.ms;
+      delaysDone++;
+      if (r.ms == null) {
+        final failure = DelayFailure.from(r.error ?? '');
+        delayErrors[s.id] = failure;
+        log('${s.name}: ${failure.summary}\n${failure.detail}', error: true);
+      } else {
+        delayErrors.remove(s.id);
       }
+      notifyListeners();
     }
 
-    await Future.wait(List.generate(min(4, queue.length), (_) => worker()));
+    await Future.wait([for (var i = 0; i < list.length; i++) one(list[i], i)]);
     testingDelays = false;
     _delaysAt = DateTime.now();
     notifyListeners();
+  }
+
+  /// Delay test when the last one is older than [age]: on start, after a
+  /// subscription update, on opening the list and every 10 minutes.
+  void testDelaysIfOld([Duration age = const Duration(minutes: 1)]) {
+    final at = _delaysAt;
+    if (at != null && DateTime.now().difference(at) < age) return;
+    unawaited(testDelays());
   }
 
   /// One delay test. Xray's own log for the probe says why it failed,

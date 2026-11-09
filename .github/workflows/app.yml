@@ -80,9 +80,14 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        if: env.KEYSTORE_BASE64 != ''
         working-directory: app/android
         run: |
+          # Without the release key every build would get a fresh debug key,
+          # and Android refuses such an update ("app not installed").
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS secrets are missing"
+            exit 1
+          fi
           echo "$KEYSTORE_BASE64" | base64 -d > release.jks
           cat > key.properties <<EOF
           storeFile=release.jks
@@ -97,12 +102,21 @@ jobs:
         run: |
           ../.github/scripts/logged.sh apk flutter build apk --release
           mv build/app/outputs/flutter-apk/app-release.apk "$RUNNER_TEMP/GateX-universal.apk"
-          flutter build apk --release --split-per-abi
+          # Same versionCode in every apk, so the universal and the arm64
+          # builds can replace each other.
+          flutter build apk --release --split-per-abi -P force-version-code-ignoring-abi=true
           mkdir -p dist
           mv "$RUNNER_TEMP/GateX-universal.apk" dist/
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk dist/GateX-arm64.apk
           cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk dist/GateX-armv7.apk
           ls -la dist
+          # Every apk must carry the release key and the same versionCode.
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          for f in dist/*.apk; do
+            "$BT/apksigner" verify --print-certs "$f" | grep -m1 'certificate DN' | tee /dev/stderr | grep -qv 'CN=Android Debug'
+            "$BT/aapt" dump badging "$f" | head -1
+          done
+          [ "$(for f in dist/*.apk; do "$BT/aapt" dump badging "$f" | head -1 | grep -o "versionCode='[0-9]*'"; done | sort -u | wc -l)" = 1 ]
       - uses: actions/upload-artifact@v4
         with:
           name: GateX-android
