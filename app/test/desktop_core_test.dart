@@ -42,4 +42,23 @@ void main() {
     expect(p.killed, isTrue);
     expect(states, contains(VpnState.disconnected));
   });
+
+  test('a launch without a deadline (pkexec) is not timed out', () async {
+    final p = _SilentProcess();
+    final core = DesktopCore(
+      startProcess: (_, _) async => p,
+      launchTimeout: const Duration(milliseconds: 50),
+    );
+    var done = false;
+    final f = core.launchForTest('x', const [], timeout: false).then((e) {
+      done = true;
+      return e;
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(done, isFalse);
+    expect(p.killed, isFalse);
+    // The helper exiting still ends the launch with its error.
+    p.kill();
+    expect(await f, contains('exited'));
+  });
 }

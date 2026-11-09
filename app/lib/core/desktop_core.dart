@@ -76,7 +76,9 @@ class DesktopCore implements VpnCore {
 
     var error = await _launch(_corePath, args);
     if (error != null && Platform.isLinux && _isPermissionError(error)) {
-      error = await _launch('pkexec', [_corePath, ...args]);
+      // No deadline: pkexec waits for the user's password, and killing it
+      // could orphan a root core with the TUN up.
+      error = await _launch('pkexec', [_corePath, ...args], timeout: false);
     }
     return error;
   }
@@ -141,12 +143,19 @@ Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | ForE
   }
 
   @visibleForTesting
-  Future<String?> launchForTest(String exe, List<String> args) =>
-      _launch(exe, args);
+  Future<String?> launchForTest(
+    String exe,
+    List<String> args, {
+    bool timeout = true,
+  }) => _launch(exe, args, timeout: timeout);
 
   /// Starts the helper and waits until it reports "started". Returns null
   /// on success, or the helper's error text.
-  Future<String?> _launch(String exe, List<String> args) async {
+  Future<String?> _launch(
+    String exe,
+    List<String> args, {
+    bool timeout = true,
+  }) async {
     final Process p;
     try {
       p = await startProcess(exe, args);
@@ -183,15 +192,17 @@ Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | ForE
       );
     });
 
-    final error = await started.future.timeout(
-      launchTimeout,
-      onTimeout: () {
-        // A helper that never says "started" must not hold the connect.
-        p.kill();
-        _status.add(const VpnStatus(VpnState.disconnected));
-        return 'Ядро не запустилось за ${launchTimeout.inSeconds} секунд';
-      },
-    );
+    final error = await (timeout
+        ? started.future.timeout(
+            launchTimeout,
+            onTimeout: () {
+              // A helper that never says "started" must not hold the connect.
+              p.kill();
+              _status.add(const VpnStatus(VpnState.disconnected));
+              return 'Ядро не запустилось за ${launchTimeout.inSeconds} секунд';
+            },
+          )
+        : started.future);
     if (error == null) {
       _process = p;
       _status.add(const VpnStatus(VpnState.connected));
