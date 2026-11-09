@@ -4,6 +4,7 @@ on:
   push:
     branches: [main, "claude/**"]
     tags: ["v*"]
+    # A release commit must touch one of these paths, or nothing runs.
     paths: ["app/**", "core/**", ".github/workflows/app.yml"]
   workflow_dispatch:
 
