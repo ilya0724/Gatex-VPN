@@ -7,7 +7,6 @@ import '../core/vpn_core.dart';
 import '../links.dart';
 import '../routing/routing_settings.dart';
 import '../state/app_state.dart';
-import '../state/auto_pick.dart';
 import '../subscription/server.dart';
 import '../subscription/subscription.dart';
 import 'flags.dart';
@@ -672,7 +671,7 @@ class _ServerTile extends StatelessWidget {
                 ),
                 Text(
                   s == null
-                      ? 'Самый быстрый из ${_servers(autoCandidates(state.servers).length)}'
+                      ? 'Основные серверы, LTE — в запасе'
                       : s.isRussian
                       ? 'не входит в Авто'
                       : s.description ?? s.transport,
@@ -868,9 +867,6 @@ class _LinksRow extends StatelessWidget {
     );
   }
 }
-
-String _servers(int n) =>
-    n % 10 == 1 && n % 100 != 11 ? '$n сервера' : '$n серверов';
 
 /// Under the timer while connected: speed both ways, traffic of this
 /// session, and the address sites see.

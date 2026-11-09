@@ -205,8 +205,9 @@ class _ServerListState extends State<ServerList> {
       ),
       onTap: () => _pick(s.id),
     );
-    // Russian servers stay selectable by hand but are never used by Авто.
-    return s.isRussian ? Opacity(opacity: 0.45, child: card) : card;
+    // Russian servers stay selectable by hand but are never used by Авто;
+    // the «не входит в Авто» line says so, the card itself looks normal.
+    return card;
   }
 
   void _pick(String id) {
