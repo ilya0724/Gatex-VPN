@@ -5,6 +5,42 @@ import 'dart:io';
 /// addresses change with every connect and must not count as a network change.
 const _tunNames = {'tun0', 'gatex', 'gatex0'};
 
+/// Windows' own IPv6 transition tunnels. Their addresses come and go by
+/// themselves (Teredo re-qualifies when the routes change, e.g. when the
+/// GateX TUN comes up), so watching them made a reconnect loop.
+const _systemTunnels = ['teredo', 'isatap', '6to4', 'ip-https'];
+
+/// One snapshot entry per interface: its IPv4 addresses, or only the fact
+/// that it has IPv6. Switching networks always changes IPv4; IPv6 privacy
+/// addresses rotate on their own and must not look like a new network.
+Set<String> networkSnapshot(Iterable<(String, List<InternetAddress>)> ifaces) {
+  final out = <String>{};
+  for (final (rawName, addrs) in ifaces) {
+    final name = rawName.toLowerCase();
+    if (_tunNames.contains(name) || name.startsWith('gatex')) continue;
+    if (_systemTunnels.any(name.contains)) continue;
+    var v6 = false;
+    for (final a in addrs) {
+      if (a.isLoopback || a.isLinkLocal) continue;
+      if (a.type == InternetAddressType.IPv4) {
+        if (_isOwnTun(a)) continue;
+        out.add('$rawName|${a.address}');
+      } else if (a.type == InternetAddressType.IPv6) {
+        v6 = true;
+      }
+    }
+    if (v6) out.add('$rawName|v6');
+  }
+  return out;
+}
+
+/// The GateX TUN's own subnet (gateway 172.19.0.1/30 in config_builder.dart),
+/// whatever name Windows gives the adapter ("GateX 2" after a stale one).
+bool _isOwnTun(InternetAddress a) {
+  final b = a.rawAddress;
+  return b.length == 4 && b[0] == 172 && b[1] == 19 && b[2] == 0 && b[3] < 4;
+}
+
 /// Desktop only: polls the addresses of the network interfaces and emits when
 /// they change (Wi-Fi <-> cable, another Wi-Fi, network lost and back).
 /// Several changes within [debounce] give one event.
@@ -80,14 +116,6 @@ class NetworkWatch {
       includeLoopback: false,
       includeLinkLocal: false,
     );
-    final out = <String>{};
-    for (final i in list) {
-      if (_tunNames.contains(i.name.toLowerCase())) continue;
-      for (final a in i.addresses) {
-        if (a.isLoopback || a.isLinkLocal) continue;
-        out.add('${i.name}|${a.address}');
-      }
-    }
-    return out;
+    return networkSnapshot([for (final i in list) (i.name, i.addresses)]);
   }
 }
