@@ -1,7 +1,7 @@
 name: gatex
 description: "GateX VPN"
 publish_to: 'none'
-version: 1.4.4+11
+version: 1.4.5+12
 
 environment:
   sdk: ^3.13.5
